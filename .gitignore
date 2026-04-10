@@ -1,0 +1,15 @@
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+.DS_Store
+.idea/
+.vscode/
+auth.json
+device.json

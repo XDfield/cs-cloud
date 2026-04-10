@@ -1,0 +1,3 @@
+package localserver
+
+func AuthMiddleware() {}
