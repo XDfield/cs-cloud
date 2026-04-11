@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"cs-cloud/internal/platform"
+	"cs-cloud/internal/version"
 )
 
 func ValidateDeviceToken(ctx context.Context, device *DeviceInfo) error {
 	reqBody := map[string]any{
 		"deviceID": device.DeviceID,
-		"version":  "dev",
+		"version":  version.Get(),
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
@@ -50,7 +51,7 @@ func AssignGateway(ctx context.Context, device *DeviceInfo) (string, error) {
 
 	reqBody := map[string]any{
 		"deviceID": device.DeviceID,
-		"version":  "dev",
+		"version":  version.Get(),
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {

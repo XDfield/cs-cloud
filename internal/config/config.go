@@ -1,6 +1,6 @@
 package config
 
 type Config struct {
-	CloudBaseURL string
-	BaseURL      string
+	CloudBaseURL string `json:"cloud_base_url"`
+	BaseURL      string `json:"base_url"`
 }

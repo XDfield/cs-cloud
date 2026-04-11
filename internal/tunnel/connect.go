@@ -13,6 +13,7 @@ import (
 
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/logger"
+	"cs-cloud/internal/version"
 
 	"github.com/hashicorp/yamux"
 	"nhooyr.io/websocket"
@@ -54,7 +55,7 @@ func Connect(ctx context.Context, localPort int) error {
 
 func runSession(ctx context.Context, gatewayURL, deviceID, deviceToken string, localPort int) error {
 	wsURL := strings.Replace(gatewayURL, "http", "ws", 1)
-	wsURL = fmt.Sprintf("%s/device/%s/tunnel?token=%s", wsURL, deviceID, url.QueryEscape(deviceToken))
+	wsURL = fmt.Sprintf("%s/device/%s/tunnel?token=%s&client_version=%s", wsURL, deviceID, url.QueryEscape(deviceToken), url.QueryEscape(version.Get()))
 
 	logger.Info("[tunnel] connecting to %s", redactToken(wsURL))
 

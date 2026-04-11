@@ -14,6 +14,7 @@ import (
 	"cs-cloud/internal/config"
 	"cs-cloud/internal/platform"
 	"cs-cloud/internal/provider"
+	"cs-cloud/internal/version"
 )
 
 const cloudAPIPrefix = "cloud-api"
@@ -149,7 +150,7 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 		DeviceID:    deviceID,
 		DisplayName: hostname(),
 		Platform:    provider.JSPlatform(),
-		Version:     "dev",
+		Version:     version.Get(),
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {

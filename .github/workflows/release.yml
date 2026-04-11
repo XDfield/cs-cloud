@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+        id: setup-go
+      - name: Generate SHA256 per binary
+        run: |
+          cat > .goreleaser-after.sh << 'SCRIPT'
+          #!/bin/env bash
+          set -euo pipefail
+          DIST_DIR="$1"
+          for f in "$DIST_DIR"/cs-cloud-*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            sha=$(sha256sum "$f" | awk '{print $1}')
+            echo "${sha}  ${base}" > "${f}.sha256"
+            echo "checksum: ${base} -> ${sha}"
+          done
+          SCRIPT
+          chmod +x .goreleaser-after.sh
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GO_VERSION: go${{ steps.setup-go.outputs.go-version }}
+      - name: Upload per-binary SHA256
+        run: |
+          for f in dist/cs-cloud-*.sha256; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            gh release upload "${GITHUB_REF_NAME}" "$f" --clobber
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

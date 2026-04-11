@@ -5,6 +5,8 @@ import (
 
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/provider"
+	"cs-cloud/internal/updater"
+	"cs-cloud/internal/version"
 )
 
 func doctor(a *app.App) error {
@@ -20,12 +22,11 @@ func doctor(a *app.App) error {
 	if err != nil {
 		return err
 	}
-	hasCred := cred != nil
-	hasDev := dev != nil
 	serverURL, err := a.ServerURL()
 	if err != nil {
 		return err
 	}
+
 	machineID := ""
 	credBaseURL := ""
 	deviceID := ""
@@ -38,6 +39,29 @@ func doctor(a *app.App) error {
 		deviceID = dev.DeviceID
 		deviceBaseURL = dev.BaseURL
 	}
-	fmt.Printf("doctor: ok\nrunning: %t\nroot: %s\ncloud_base_url: %s\nauth_json_loaded: %t\ncredential_base_url: %s\nmachine_id: %s\ndevice_registered: %t\ndevice_id: %s\ndevice_base_url: %s\nlocal_server_url: %s\n", running, a.RootDir(), a.CloudBaseURL(), hasCred, credBaseURL, machineID, hasDev, deviceID, deviceBaseURL, serverURL)
+
+	mgr := updater.NewManager(a.CloudBaseURL(), a.RootDir())
+	upgradeStatus := "none"
+	if state, _ := mgr.History(); state != nil {
+		upgradeStatus = state.Status
+	}
+
+	printTitle("cs-cloud doctor")
+	printSuccess("OK")
+	fmt.Print(renderKV([][2]string{
+		{"version", version.Get()},
+		{"commit", version.Commit},
+		{"running", fmt.Sprintf("%t", running)},
+		{"root", a.RootDir()},
+		{"cloud_url", a.CloudBaseURL()},
+		{"auth", fmt.Sprintf("%t", cred != nil)},
+		{"cred_base_url", credBaseURL},
+		{"machine_id", machineID},
+		{"device", fmt.Sprintf("%t", dev != nil)},
+		{"device_id", deviceID},
+		{"device_base_url", deviceBaseURL},
+		{"local_url", serverURL},
+		{"upgrade", upgradeStatus},
+	}))
 	return nil
 }

@@ -89,6 +89,11 @@ func dispatch(a *app.App) error {
 		return login(a)
 	case "logout":
 		return logout(a)
+	case "version":
+		printVersion()
+		return nil
+	case "update":
+		return updateCmd(a)
 	case "serve":
 		return serve(a)
 	case "_daemon":
@@ -103,21 +108,30 @@ func dispatch(a *app.App) error {
 }
 
 func printUsage() {
-	fmt.Println("Usage: cs-cloud [flags] <command>")
-	fmt.Println()
-	fmt.Println("Flags:")
-	fmt.Println("  --auth-path <path>  Path to auth.json (default: ~/.costrict/share/auth.json)")
-	fmt.Println("  --mode, -m <mode>   Daemon mode: cloud (default) or local")
-	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  start     Start daemon (cloud mode with WS tunnel, or --mode local for HTTP only)")
-	fmt.Println("  stop      Stop daemon")
-	fmt.Println("  restart   Restart daemon")
-	fmt.Println("  status    Show daemon status")
-	fmt.Println("  logs      Show daemon logs")
-	fmt.Println("  doctor    Show diagnostic info")
-	fmt.Println("  register  Register device")
-	fmt.Println("  login     Login via browser OAuth")
-	fmt.Println("  logout    Delete credentials and device info")
-	fmt.Println("  serve     Run server in foreground (no daemon)")
+	printTitle("cs-cloud")
+	printSection("Usage")
+	fmt.Println(dimStyle.Render("  cs-cloud [flags] <command>"))
+
+	printSection("Flags")
+	fmt.Print(renderKV([][2]string{
+		{"--auth-path", "Path to auth.json (default: ~/.costrict/share/auth.json)"},
+		{"--mode, -m", "Daemon mode: cloud (default) or local"},
+	}))
+
+	printSection("Commands")
+	cmds := [][2]string{
+		{"version", "Show version info"},
+		{"update", "Manage updates (check, apply, rollback, history)"},
+		{"start", "Start daemon (cloud mode with WS tunnel, or --mode local)"},
+		{"stop", "Stop daemon"},
+		{"restart", "Restart daemon"},
+		{"status", "Show daemon status"},
+		{"logs", "Show daemon logs"},
+		{"doctor", "Show diagnostic info"},
+		{"register", "Register device"},
+		{"login", "Login via browser OAuth"},
+		{"logout", "Delete credentials and device info"},
+		{"serve", "Run server in foreground (no daemon)"},
+	}
+	fmt.Print(renderKV(cmds))
 }

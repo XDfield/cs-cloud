@@ -14,7 +14,12 @@ import (
 )
 
 func serve(a *app.App) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	srv := localserver.New(localserver.WithVersion(version.Get()))
+	srv.InitDrivers(ctx)
+
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		return err
 	}
@@ -25,15 +30,24 @@ func serve(a *app.App) error {
 	printTitle("cs-cloud serve")
 	printSuccess("Server running")
 	printKV("url", srv.URL())
+
+	agents, _ := srv.Manager().DetectAgents(ctx)
+	for _, ag := range agents {
+		if ag.Available {
+			printSuccess("Agent detected: %s (%s)", ag.Name, ag.Backend)
+		}
+	}
+
 	printInfo("Press Ctrl+C to stop")
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	defer shutdownCancel()
 
 	fmt.Println()
 	printInfo("Shutting down...")
-	return srv.Shutdown(ctx)
+	return srv.Shutdown(shutdownCtx)
 }

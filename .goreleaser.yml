@@ -1,0 +1,60 @@
+version: 2
+
+project_name: cs-cloud
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/cs-cloud
+    binary: cs-cloud
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X cs-cloud/internal/version.Version={{.Version}}
+      - -X cs-cloud/internal/version.Commit={{.Commit}}
+      - -X cs-cloud/internal/version.BuildTime={{.Date}}
+      - -X cs-cloud/internal/version.GoVersion={{.Env.GO_VERSION}}
+      - -X cs-cloud/internal/version.Platform={{.Os}}-{{.Arch}}
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+extra_files:
+  - glob: "./checksums.txt"
+
+archives:
+  - format: binary
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: cs-cloud
+  draft: false
+  prerelease: auto
+  mode: replace
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
