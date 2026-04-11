@@ -213,48 +213,10 @@ This should be modeled as a first-class ACP-compatible event channel.
 
 ## Proposed Minimal `cs-cloud` Surface
 
-### A. Runtime / Control Surface
+接口定义已拆分至独立文档，本文仅保留设计原则与边界划分：
 
-- `runtime.health`
-- `runtime.target.context`
-- `runtime.model.capabilities.list`
-- `runtime.file.list`
-- `runtime.file.read`
-- `runtime.find.files`
-- `runtime.find.text`
-- `runtime.mcp.status`
-- `runtime.mcp.connect`
-- `runtime.mcp.disconnect`
-- `runtime.lsp.status`
-- `runtime.vcs.get`
-- `runtime.terminal.create`
-- `runtime.terminal.input`
-- `runtime.terminal.resize`
-- `runtime.terminal.remove`
-- `runtime.instance.dispose`
-
-### B. ACP Conversation Flow Surface
-
-- `conversation.create`
-- `conversation.get`
-- `conversation.list`
-- `conversation.update`
-- `conversation.delete`
-- `conversation.abort`
-- `conversation.revert`
-- `conversation.unrevert`
-- `conversation.messages`
-- `conversation.prompt`
-- `conversation.command`
-- `conversation.shell`
-- `conversation.diff`
-- `conversation.todo`
-- `interaction.permission.list`
-- `interaction.permission.respond`
-- `interaction.question.list`
-- `interaction.question.reply`
-- `interaction.question.reject`
-- `event.stream`
+- **Runtime / Control Surface** → 见 [`runtime-control-api.md`](runtime-control-api.md)
+- **ACP Conversation Flow Surface** → 见 [`acp-agent-integration.md`](acp-agent-integration.md) 的 "RESTful API Surface" 章节
 
 ## Naming Direction
 
