@@ -9,27 +9,37 @@ import (
 )
 
 type Server struct {
-	http *http.Server
-	ln   net.Listener
-	url  string
+	http   *http.Server
+	ln     net.Listener
+	url    string
+	version string
 }
 
-func New() *Server {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-	mux.HandleFunc("/agents", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agents":[]}`))
-	})
-	return &Server{
-		http: &http.Server{
-			Handler:           mux,
-			ReadHeaderTimeout: 5 * time.Second,
-		},
+func New(opts ...Option) *Server {
+	initStartTime()
+
+	s := &Server{}
+	for _, o := range opts {
+		o(s)
 	}
+
+	mux := http.NewServeMux()
+	api := http.NewServeMux()
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", api))
+
+	api.HandleFunc("GET /runtime/health", s.handleHealth)
+
+	s.http = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	return s
+}
+
+type Option func(*Server)
+
+func WithVersion(v string) Option {
+	return func(s *Server) { s.version = v }
 }
 
 func (s *Server) Start(addr string) error {

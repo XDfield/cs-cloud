@@ -13,6 +13,7 @@ import (
 	"cs-cloud/internal/localserver"
 	"cs-cloud/internal/logger"
 	"cs-cloud/internal/tunnel"
+	"cs-cloud/internal/version"
 )
 
 func runDaemon(a *app.App) error {
@@ -27,7 +28,7 @@ func runDaemon(a *app.App) error {
 	})
 	defer logger.Sync()
 
-	srv := localserver.New()
+	srv := localserver.New(localserver.WithVersion(version.Get()))
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		logger.Error("failed to start server: %v", err)
 		return err
