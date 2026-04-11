@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/device"
@@ -14,6 +13,9 @@ func register(a *app.App) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("device registered\ndevice_id: %s\nbase_url: %s\n", info.DeviceID, info.BaseURL)
+	printTitle("cs-cloud register")
+	printSuccess("Device registered")
+	printKV("device_id", info.DeviceID)
+	printKV("base_url", info.BaseURL)
 	return nil
 }

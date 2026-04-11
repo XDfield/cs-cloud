@@ -20,18 +20,22 @@ func login(a *app.App) error {
 		return err
 	}
 
-	fmt.Printf("login successful\nmachine_id: %s\nbase_url: %s\n", cred.MachineID, cred.BaseURL)
+	printTitle("cs-cloud login")
+	printSuccess("Login successful")
+	printKV("machine_id", cred.MachineID)
+	printKV("base_url", cred.BaseURL)
 
 	info, err := device.Register(ctx, a.Config())
 	if err != nil {
 		if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) {
-			fmt.Println("authentication issue, please try login again")
+			printWarn("Authentication issue, please try login again")
 			return err
 		}
-		fmt.Printf("warning: device registration failed: %v\n", err)
+		printWarn("Device registration failed: %v", err)
 		return nil
 	}
-	fmt.Printf("device registered\ndevice_id: %s\n", info.DeviceID)
+	printSuccess("Device registered")
+	printKV("device_id", info.DeviceID)
 	return nil
 }
 
@@ -42,6 +46,6 @@ func logout(a *app.App) error {
 	if err := device.ClearDevice(); err != nil {
 		return fmt.Errorf("clear device: %w", err)
 	}
-	fmt.Println("logged out")
+	printSuccess("Logged out")
 	return nil
 }

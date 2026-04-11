@@ -18,18 +18,34 @@ func status(a *app.App) error {
 	if err != nil {
 		return err
 	}
-	hasCred := cred != nil
-	hasDev := dev != nil
-	base := a.CloudBaseURL()
+	mode := a.LoadMode()
 	serverURL, err := a.ServerURL()
 	if err != nil {
 		return err
 	}
-	mode := a.LoadMode()
+
+	printTitle("cs-cloud status")
+
 	if running {
-		fmt.Printf("status: running\npid: %d\nmode: %s\nroot: %s\ncloud_base_url: %s\nauth_json_loaded: %t\ndevice_registered: %t\nlocal_server_url: %s\nlogs: %s\n", pid, mode, a.RootDir(), base, hasCred, hasDev, serverURL, filepath.Join(a.RootDir(), "app.log"))
-		return nil
+		printSuccess("Running")
+		fmt.Print(renderKV([][2]string{
+			{"pid", fmt.Sprintf("%d", pid)},
+			{"mode", mode},
+			{"root", a.RootDir()},
+			{"cloud_url", a.CloudBaseURL()},
+			{"auth", fmt.Sprintf("%t", cred != nil)},
+			{"device", fmt.Sprintf("%t", dev != nil)},
+			{"local_url", serverURL},
+			{"logs", filepath.Join(a.RootDir(), "app.log")},
+		}))
+	} else {
+		printInfo("Stopped")
+		fmt.Print(renderKV([][2]string{
+			{"root", a.RootDir()},
+			{"cloud_url", a.CloudBaseURL()},
+			{"auth", fmt.Sprintf("%t", cred != nil)},
+			{"device", fmt.Sprintf("%t", dev != nil)},
+		}))
 	}
-	fmt.Printf("status: stopped\nroot: %s\ncloud_base_url: %s\nauth_json_loaded: %t\ndevice_registered: %t\n", a.RootDir(), base, hasCred, hasDev)
 	return nil
 }

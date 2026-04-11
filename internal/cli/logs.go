@@ -13,7 +13,8 @@ func logs(a *app.App) error {
 	path := a.LogFilePath()
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Printf("no log file found: %s\n", path)
+		printWarn("No log file found")
+		printInfo("Path: %s", path)
 		return nil
 	}
 	defer f.Close()
@@ -37,7 +38,7 @@ func logs(a *app.App) error {
 func tailLogs(a *app.App, follow bool) {
 	path := a.LogFilePath()
 	if _, err := os.Stat(path); err != nil {
-		fmt.Println("no log file found")
+		printWarn("No log file found")
 		return
 	}
 
