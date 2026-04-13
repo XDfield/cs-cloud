@@ -738,7 +738,6 @@ type HealthResult struct {
 type AgentConfig struct {
     ID          string            `json:"id"`
     Backend     string            `json:"backend"`
-    Driver      string            `json:"driver"` // selects which driver to use
     WorkingDir  string            `json:"working_dir"`
     CLIPath     string            `json:"cli_path,omitempty"`
     CustomArgs  []string          `json:"custom_args,omitempty"`
@@ -746,7 +745,6 @@ type AgentConfig struct {
     YOLOMode    bool              `json:"yolo_mode,omitempty"`
     ModelID     string            `json:"model_id,omitempty"`
     SessionMode string            `json:"session_mode,omitempty"`
-    // Driver-specific extension point
     Extra       map[string]any    `json:"extra,omitempty"`
 }
 ```
@@ -936,6 +934,43 @@ func (s *SessionStore) Delete(id string) error
 
 These extend the previously defined `runtime-control-api.md` with ACP conversation endpoints.
 
+### Agent Routing Headers
+
+All agent endpoints (conversations, interactions, agents/*) use HTTP headers to route requests to the correct agent driver:
+
+| Header | Required | Description |
+|---|---|---|
+| `X-Backend` | no | Target backend ID, e.g. `claude`, `qwen`, `goose`. Omit to use default runtime |
+
+When `X-Backend` is omitted, cs-cloud selects the default runtime:
+- If only one runtime is available → use it
+- If multiple → use the one configured as default in `agents.toml`
+- If none → return 503 `UNAVAILABLE`
+
+Driver is resolved internally by cs-cloud based on backend ID:
+
+| Backend | Driver |
+|---|---|
+| Any key in `BuiltInBackends` | `acp` |
+| `remote` | `ws` |
+| Others | `custom` |
+
+Routing logic:
+
+1. `POST /conversations` — reads `X-Backend` to select driver and create agent instance
+2. `/conversations/:id/*` — primarily routed via `conversationID → Agent` mapping stored in `AgentManager`; `X-Backend` used as validation hint
+3. `/agents/*` — uses `X-Backend` to select target runtime for health/models/session-modes/config/mcp/lsp queries
+4. `/interactions/*` — uses `X-Backend` to filter/query the correct agent's pending state
+5. `WS /events/stream` — uses `X-Backend` to subscribe to events from the correct agent
+
+Auto-inference rules when `X-Driver` is omitted:
+
+| Backend | Inferred Driver |
+|---|---|
+| Any key in `BuiltInBackends` | `acp` |
+| `remote` | `ws` |
+| Others | `custom` |
+
 ### Conversation Flow
 
 | Method | Path | ACP Method | Description |
@@ -975,11 +1010,24 @@ These extend the previously defined `runtime-control-api.md` with ACP conversati
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/agents` | List all detected agents (aggregated from all drivers) |
-| `GET` | `/agents/:backend/health` | Health check for specific backend |
-| `GET` | `/agents/:backend/models` | Probe model info for backend |
+| `GET` | `/agents` | List all detected agent runtimes (aggregated from all drivers) |
+| `GET` | `/agents/health` | Health check for agent runtime (X-Backend selects, default if omitted) |
+| `GET` | `/agents/models` | Probe model info for agent runtime (X-Backend selects) |
+| `GET` | `/agents/session-modes` | List session modes for agent runtime (X-Backend selects) |
+| `GET` | `/agents/config` | Get/set agent runtime configuration (X-Backend selects) |
 | `GET` | `/drivers` | List registered drivers |
 | `POST` | `/drivers` | Register a custom driver (config-based) |
+
+### Agent MCP & LSP
+
+MCP and LSP are per-agent session resources, not global runtime state.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/agents/mcp/status` | Get MCP server status (X-Backend selects) |
+| `POST` | `/agents/mcp/connections` | Connect MCP server (X-Backend selects) |
+| `DELETE` | `/agents/mcp/connections/:server_id` | Disconnect MCP server (X-Backend selects) |
+| `GET` | `/agents/lsp/status` | Get LSP server status (X-Backend selects) |
 
 ---
 
@@ -1071,17 +1119,14 @@ No changes to the manager, event bus, REST handlers, or upstream consumers.
 **User-provided drivers**:
 - Compiled into the binary (Go import)
 - Or loaded at runtime via `CustomDriver` with injected factory functions
-- Config-driven: `AgentConfig.Driver` selects which driver to use
 
-**Driver selection flow**:
+**Driver selection flow** (resolved internally by `Registry.InferDriver(backend)`):
 ```
-AgentConfig{Driver: "acp", Backend: "claude"}  → ACPDriver → ACPAgent
-AgentConfig{Driver: "acp", Backend: "qwen"}     → ACPDriver → ACPAgent
-AgentConfig{Driver: "ws",  Backend: "remote"}   → WSDriver  → WSAgent
-AgentConfig{Driver: "custom", Backend: "my-ai"} → CustomDriver → MyAgent
+AgentConfig{Backend: "claude"}  → InferDriver("claude")  → "acp" → ACPDriver → ACPAgent
+AgentConfig{Backend: "qwen"}    → InferDriver("qwen")    → "acp" → ACPDriver → ACPAgent
+AgentConfig{Backend: "remote"}  → InferDriver("remote")  → "ws"  → WSDriver  → WSAgent
+AgentConfig{Backend: "my-ai"}  → InferDriver("my-ai")   → "custom" → CustomDriver → MyAgent
 ```
-
-When `Driver` is not specified, defaults to `"acp"` for known ACP backends, `"ws"` for `remote`, and `"custom"` otherwise.
 
 ### 6. ACP Driver vs Custom Driver Boundary
 

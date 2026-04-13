@@ -73,49 +73,7 @@ Returns the current runtime target directory context.
 
 ---
 
-## 3. Runtime Model Capabilities
-
-### `GET /runtime/models/capabilities`
-
-Lists connected providers and their model capabilities.
-
-**Query Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `provider` | string | Filter by provider ID (optional) |
-
-**Response 200**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "providers": [
-      {
-        "id": "openai",
-        "name": "OpenAI",
-        "connected": true,
-        "default_model": "gpt-4o",
-        "models": [
-          {
-            "id": "gpt-4o",
-            "name": "GPT-4o",
-            "context_window": 128000,
-            "supports_tools": true,
-            "supports_vision": true,
-            "supports_streaming": true
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
----
-
-## 4. Runtime File Operations
+## 3. Runtime File Operations
 
 ### `GET /runtime/files`
 
@@ -183,7 +141,7 @@ Read file content.
 
 ---
 
-## 5. Runtime Find Operations
+## 4. Runtime Find Operations
 
 ### `GET /runtime/find/files`
 
@@ -253,105 +211,7 @@ Search file contents by text/regex.
 
 ---
 
-## 6. Runtime MCP
-
-### `GET /runtime/mcp/status`
-
-Get MCP server connection status.
-
-**Response 200**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "servers": [
-      {
-        "id": "filesystem",
-        "name": "Filesystem MCP",
-        "status": "connected",
-        "tools_count": 5,
-        "connected_at": "2025-04-10T12:00:00Z"
-      }
-    ]
-  }
-}
-```
-
-### `POST /runtime/mcp/connections`
-
-Connect to an MCP server.
-
-**Request Body**
-
-```json
-{
-  "server_id": "filesystem",
-  "config": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
-  }
-}
-```
-
-**Response 201**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "server_id": "filesystem",
-    "status": "connected",
-    "tools_count": 5
-  }
-}
-```
-
-### `DELETE /runtime/mcp/connections/:server_id`
-
-Disconnect an MCP server.
-
-**Response 200**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "server_id": "filesystem",
-    "status": "disconnected"
-  }
-}
-```
-
----
-
-## 7. Runtime LSP
-
-### `GET /runtime/lsp/status`
-
-Get LSP server status.
-
-**Response 200**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "servers": [
-      {
-        "id": "gopls",
-        "language": "go",
-        "status": "running",
-        "initialized": true
-      }
-    ]
-  }
-}
-```
-
----
-
-## 8. Runtime VCS
+## 5. Runtime VCS
 
 ### `GET /runtime/vcs`
 
@@ -384,7 +244,7 @@ Get version control info for the current target.
 
 ---
 
-## 9. Runtime Terminal
+## 6. Runtime Terminal
 
 ### `POST /runtime/terminals`
 
@@ -497,26 +357,6 @@ Binary frames containing raw PTY output bytes.
 
 ---
 
-## 10. Runtime Instance
-
-### `DELETE /runtime/instances/:id`
-
-Dispose a runtime instance and clean up resources.
-
-**Response 200**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "id": "inst-001",
-    "status": "disposed"
-  }
-}
-```
-
----
-
 ## Error Codes
 
 | Code | HTTP Status | Description |
@@ -535,18 +375,17 @@ Dispose a runtime instance and clean up resources.
 |---|---|---|---|
 | `runtime.health` | GET | `/runtime/health` | bootstrap |
 | `runtime.target.context` | GET | `/runtime/target/context` | bootstrap |
-| `runtime.model.capabilities.list` | GET | `/runtime/models/capabilities` | bootstrap |
 | `runtime.file.list` | GET | `/runtime/files` | standard |
 | `runtime.file.read` | GET | `/runtime/files/content` | standard |
 | `runtime.find.files` | GET | `/runtime/find/files` | standard |
 | `runtime.find.text` | GET | `/runtime/find/text` | standard |
-| `runtime.mcp.status` | GET | `/runtime/mcp/status` | lazy |
-| `runtime.mcp.connect` | POST | `/runtime/mcp/connections` | lazy |
-| `runtime.mcp.disconnect` | DELETE | `/runtime/mcp/connections/:server_id` | lazy |
-| `runtime.lsp.status` | GET | `/runtime/lsp/status` | lazy |
 | `runtime.vcs.get` | GET | `/runtime/vcs` | lazy |
 | `runtime.terminal.create` | POST | `/runtime/terminals` | standard |
 | `runtime.terminal.input` | POST | `/runtime/terminals/:id/input` | standard |
 | `runtime.terminal.resize` | PATCH | `/runtime/terminals/:id/size` | standard |
 | `runtime.terminal.remove` | DELETE | `/runtime/terminals/:id` | standard |
-| `runtime.instance.dispose` | DELETE | `/runtime/instances/:id` | standard |
+
+> **Note**: Instance dispose (`DELETE /runtime/instances/:id`) removed — process lifecycle managed via CLI `stop` command or signal handling, not REST API.
+
+> **Note**: MCP and LSP endpoints have been moved to the Agent Surface.
+> See `api-surface-separation.md` → `/agents/:id/mcp/*` and `/agents/:id/lsp/*`.
