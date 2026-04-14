@@ -45,6 +45,14 @@ func runDaemon(a *app.App) error {
 
 	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
 
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			srv.TerminalManager().CleanupIdle(30 * time.Minute)
+		}
+	}()
+
 	if mode == "cloud" {
 		info, err := device.LoadDevice()
 		if err != nil || info == nil {
