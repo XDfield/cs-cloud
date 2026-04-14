@@ -18,7 +18,12 @@ func serve(a *app.App) error {
 	defer cancel()
 
 	srv := localserver.New(localserver.WithVersion(version.Get()))
-	srv.InitDrivers(ctx)
+
+	if err := srv.Manager().InitDefaultAgent(ctx); err != nil {
+		printError("Failed to init agent: %v", err)
+	} else {
+		printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
+	}
 
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		return err

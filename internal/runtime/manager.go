@@ -175,6 +175,38 @@ func (m *AgentManager) Endpoint() string {
 	return ""
 }
 
+func (m *AgentManager) DefaultBackend() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, a := range m.agents {
+		return a.Backend()
+	}
+	return ""
+}
+
+func (m *AgentManager) InitDefaultAgent(ctx context.Context) error {
+	d := agent.NewOpenCodeDriver()
+	m.RegisterDriver(d)
+
+	detected, _ := d.Detect(ctx)
+	if len(detected) == 0 || !detected[0].Available {
+		return fmt.Errorf("no available agent detected")
+	}
+
+	var extra map[string]any
+	if v, ok := detected[0].Extra.(map[string]any); ok {
+		extra = v
+	}
+	cfg := agent.AgentConfig{
+		ID:         "default",
+		Backend:    "opencode",
+		DriverName: "http",
+		WorkingDir: "",
+		Extra:      extra,
+	}
+	return m.CreateAgent(ctx, "default", cfg)
+}
+
 func (m *AgentManager) HealthCheck(ctx context.Context, backend string) (*agent.HealthResult, error) {
 	d, err := m.ResolveDriver(backend)
 	if err != nil {

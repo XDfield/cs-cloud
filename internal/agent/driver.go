@@ -2,11 +2,18 @@ package agent
 
 import "context"
 
+type ProxyRoute struct {
+	Method   string
+	Prefix   string
+	Rewrite  func(pathValues map[string]string) string
+}
+
 type Driver interface {
 	Name() string
 	Detect(ctx context.Context) ([]DetectedAgent, error)
 	CreateAgent(cfg AgentConfig) (Agent, error)
 	HealthCheck(ctx context.Context, backend string) (*HealthResult, error)
+	ProxyRoutes() []ProxyRoute
 }
 
 type DetectedAgent struct {

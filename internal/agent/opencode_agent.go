@@ -114,15 +114,6 @@ func (a *OpenCodeAgent) Start(ctx context.Context) error {
 
 	a.setState(StateConnected)
 
-	session, err := a.createSession(ctx)
-	if err != nil {
-		a.setState(StateError)
-		return fmt.Errorf("create session failed: %w", err)
-	}
-
-	a.sessionID = session.ID
-	a.setState(StateSessionActive)
-
 	go a.subscribeEvents(ctx)
 
 	return nil

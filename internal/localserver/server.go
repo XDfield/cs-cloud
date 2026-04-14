@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"cs-cloud/internal/agent"
-	"cs-cloud/internal/logger"
 	"cs-cloud/internal/runtime"
 	"cs-cloud/internal/terminal"
 )
@@ -144,30 +142,4 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) TerminalManager() *terminal.TerminalManager {
 	return s.termMgr
-}
-
-func (s *Server) InitDrivers(ctx context.Context) {
-	d := agent.NewOpenCodeDriver()
-	s.manager.RegisterDriver(d)
-	logger.Info("registered opencode driver (cli=%s)", agent.OpenCodeCLIBinary)
-
-	detected, _ := d.Detect(ctx)
-	if len(detected) > 0 && detected[0].Available {
-		var extra map[string]any
-		if m, ok := detected[0].Extra.(map[string]any); ok {
-			extra = m
-		}
-		cfg := agent.AgentConfig{
-			ID:         "default",
-			Backend:    "opencode",
-			DriverName: "http",
-			WorkingDir: "",
-			Extra:      extra,
-		}
-		if err := s.manager.CreateAgent(ctx, "default", cfg); err != nil {
-			logger.Error("failed to start opencode agent: %v", err)
-		} else {
-			logger.Info("opencode agent started (endpoint=%s)", s.manager.Endpoint())
-		}
-	}
 }
