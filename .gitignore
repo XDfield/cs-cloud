@@ -15,3 +15,4 @@ coverage.out
 auth.json
 device.json
 *.log
+.goreleaser-after.sh
