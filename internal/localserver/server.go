@@ -48,6 +48,7 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /runtime/find/file", s.handleFindFiles)
 	api.HandleFunc("GET /runtime/path", s.handlePath)
 	api.HandleFunc("GET /runtime/vcs", s.handleVcs)
+	api.HandleFunc("GET /runtime/diff", s.handleDiff)
 	api.HandleFunc("POST /runtime/dispose", s.handleInstanceDispose)
 
 	api.HandleFunc("GET /agents", s.handleListAgents)
@@ -69,7 +70,7 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("POST /conversations/{id}/abort", s.handleProxy)
 	api.HandleFunc("GET /conversations/{id}/messages", s.handleProxy)
 	api.HandleFunc("GET /conversations/{id}/todo", s.handleProxy)
-	api.HandleFunc("GET /conversations/{id}/diff", s.handleProxy)
+	api.HandleFunc("GET /conversations/{id}/diff", s.handleConversationDiffDeprecated)
 	api.HandleFunc("POST /conversations/{id}/shell", s.handleProxy)
 	api.HandleFunc("POST /conversations/{id}/command", s.handleProxy)
 
