@@ -32,18 +32,21 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	result, err := s.manager.HealthCheck(ctx, "opencode")
-	if err != nil {
-		writeErr(w, http.StatusServiceUnavailable, "UNAVAILABLE", err.Error())
+	agents := s.manager.ListAgents()
+	if len(agents) == 0 {
+		writeErr(w, http.StatusServiceUnavailable, "UNAVAILABLE", "no agent running")
 		return
 	}
 
-	if !result.Available {
-		writeErr(w, http.StatusServiceUnavailable, "UNAVAILABLE", result.Error)
-		return
+	results := make([]map[string]any, 0, len(agents))
+	for _, a := range agents {
+		results = append(results, map[string]any{
+			"id":        a.ID(),
+			"backend":   a.Backend(),
+			"driver":    a.Driver(),
+			"state":     a.State().String(),
+			"available": a.State() >= 2,
+		})
 	}
-
-	writeOK(w, result)
+	writeOK(w, map[string]any{"agents": results})
 }
