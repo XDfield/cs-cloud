@@ -5,6 +5,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"cs-cloud/internal/logger"
 )
 
 func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +49,9 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	pathValues := extractPathValues(r)
 	target := rewriteFunc(pathValues)
 
+	targetAddr := targetURL.Scheme + "://" + targetURL.Host + target
+	logger.Info("proxy %s %s -> %s", r.Method, r.URL.Path, targetAddr)
+
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	originalDirector := proxy.Director
@@ -55,6 +60,16 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		req.URL.Path = target
 		req.URL.RawPath = ""
 		req.Host = targetURL.Host
+	}
+
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		logger.Error("proxy %s %s -> %s failed: %v", r.Method, r.URL.Path, targetAddr, err)
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+	}
+
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		logger.Info("proxy %s %s -> %s %d", r.Method, r.URL.Path, targetAddr, resp.StatusCode)
+		return nil
 	}
 
 	proxy.ServeHTTP(w, r)
