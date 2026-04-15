@@ -7,9 +7,11 @@ build/
 *.dylib
 *.test
 *.out
+*.exe~
 coverage.out
 .DS_Store
 .idea/
 .vscode/
 auth.json
 device.json
+*.log
