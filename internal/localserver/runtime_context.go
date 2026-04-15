@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"cs-cloud/internal/agent"
 	"cs-cloud/internal/logger"
 )
 
@@ -59,23 +58,8 @@ func (s *Server) handleInstanceDispose(w http.ResponseWriter, r *http.Request) {
 	s.manager.KillAll()
 
 	ctx := r.Context()
-	d := agent.NewOpenCodeDriver()
-	detected, _ := d.Detect(ctx)
-	if len(detected) > 0 && detected[0].Available {
-		var extra map[string]any
-		if m, ok := detected[0].Extra.(map[string]any); ok {
-			extra = m
-		}
-		cfg := agent.AgentConfig{
-			ID:         "default",
-			Backend:    "opencode",
-			DriverName: "http",
-			WorkingDir: "",
-			Extra:      extra,
-		}
-		if err := s.manager.CreateAgent(ctx, "default", cfg); err != nil {
-			logger.Error("failed to restart opencode agent: %v", err)
-		}
+	if err := s.manager.InitDefaultAgent(ctx, ""); err != nil {
+		logger.Error("failed to restart opencode agent: %v", err)
 	}
 
 	writeOK(w, map[string]any{"disposed": true})

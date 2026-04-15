@@ -11,8 +11,11 @@ type OpenCodeDriver struct {
 	cliPath string
 }
 
-func NewOpenCodeDriver() *OpenCodeDriver {
-	return &OpenCodeDriver{cliPath: OpenCodeCLIBinary}
+func NewOpenCodeDriver(cliPath string) *OpenCodeDriver {
+	if cliPath == "" {
+		cliPath = OpenCodeCLIBinary
+	}
+	return &OpenCodeDriver{cliPath: cliPath}
 }
 
 func (d *OpenCodeDriver) Name() string { return "opencode" }

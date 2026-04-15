@@ -184,8 +184,8 @@ func (m *AgentManager) DefaultBackend() string {
 	return ""
 }
 
-func (m *AgentManager) InitDefaultAgent(ctx context.Context) error {
-	d := agent.NewOpenCodeDriver()
+func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string) error {
+	d := agent.NewOpenCodeDriver(cliPath)
 	m.RegisterDriver(d)
 
 	detected, _ := d.Detect(ctx)
