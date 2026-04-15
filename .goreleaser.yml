@@ -35,9 +35,6 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
-extra_files:
-  - glob: "./checksums.txt"
-
 archives:
   - format: binary
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
