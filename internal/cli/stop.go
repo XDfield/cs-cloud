@@ -3,6 +3,7 @@ package cli
 import "cs-cloud/internal/app"
 
 func stop(a *app.App) error {
+	printInfo("Stopping cs-cloud...")
 	stopped := a.StopDaemon()
 	if stopped {
 		printSuccess("cs-cloud stopped")
