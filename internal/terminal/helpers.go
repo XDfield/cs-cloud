@@ -19,7 +19,11 @@ type errVal struct {
 
 func readBody(r *http.Request) ([]byte, error) {
 	defer r.Body.Close()
-	return io.ReadAll(r.Body)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func jsonUnmarshal(data []byte, v any) error {

@@ -43,8 +43,16 @@ type inputReq struct {
 }
 
 func (h *Handlers) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	body, err := readBody(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	logger.Debug("terminal: HandleCreate body=%q content-length=%s", string(body), r.Header.Get("Content-Length"))
+
 	var req createReq
-	if err := readJSON(r, &req); err != nil {
+	if err := jsonUnmarshal(body, &req); err != nil {
+		logger.Debug("terminal: HandleCreate json error: %v", err)
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}

@@ -193,6 +193,8 @@ func newSession(id string, shell string, cwd string, rows, cols uint16) (*Sessio
 		cancel:      cancel,
 		subscribers: make(map[string]chan []byte),
 		ptmx:        ptmx,
+		recentBuf:   make([][]byte, 0),
+		recentMax:   1000,
 	}
 
 	go s.readOutput(ctx)
@@ -231,18 +233,15 @@ func discoverUnixShell() string {
 }
 
 func discoverWindowsShell() string {
-	candidates := []string{
-		os.Getenv("ComSpec"),
-	}
-	if systemRoot := os.Getenv("SystemRoot"); systemRoot != "" {
-		ps := systemRoot + `\System32\WindowsPowerShell\v1.0\powershell.exe`
-		candidates = append(candidates, ps)
-	}
-	candidates = append(candidates, "pwsh", "powershell")
+	candidates := []string{}
 	if gitBash := findGitBash(); gitBash != "" {
 		candidates = append(candidates, gitBash)
 	}
-	candidates = append(candidates, "cmd")
+	candidates = append(candidates, "pwsh")
+	if systemRoot := os.Getenv("SystemRoot"); systemRoot != "" {
+		candidates = append(candidates, systemRoot+`\System32\WindowsPowerShell\v1.0\powershell.exe`)
+	}
+	candidates = append(candidates, "powershell", os.Getenv("ComSpec"), "cmd")
 	for _, c := range candidates {
 		if c == "" {
 			continue

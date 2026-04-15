@@ -41,7 +41,7 @@ func startPty(shell string, cwd string, rows, cols uint16) (io.ReadWriteCloser, 
 		opts = append(opts, conpty.ConPtyWorkDir(cwd))
 	}
 	env := os.Environ()
-	env = appendUTF8Locale(env)
+	env = appendUTF8Env(env)
 	opts = append(opts, conpty.ConPtyEnv(env))
 
 	cpty, err := conpty.Start(commandLine, opts...)
@@ -63,12 +63,17 @@ func (s *Session) resizePty(rows, cols uint16) error {
 
 func buildCommandLine(shell string) string {
 	if strings.Contains(shell, " ") {
-		return fmt.Sprintf(`"%s"`, shell)
+		shell = fmt.Sprintf(`"%s"`, shell)
+	}
+
+	lower := strings.ToLower(shell)
+	if strings.Contains(lower, "cmd.exe") || strings.Contains(lower, "cmd") {
+		return shell + " /k chcp 65001 >nul"
 	}
 	return shell
 }
 
-func appendUTF8Locale(env []string) []string {
+func appendUTF8Env(env []string) []string {
 	localeKeys := map[string]string{
 		"LC_ALL":   "C.UTF-8",
 		"LC_CTYPE": "C.UTF-8",

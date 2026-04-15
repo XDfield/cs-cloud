@@ -78,10 +78,17 @@ func (c *inputWsConn) run() {
 			return
 		}
 
-		if msgType == websocket.MessageText {
+		switch msgType {
+		case websocket.MessageText:
 			text := string(data)
 			if len(text) > 0 && text[0] == '{' {
 				c.handleControl(text)
+			} else {
+				c.handleInput(data)
+			}
+		case websocket.MessageBinary:
+			if len(data) > 0 && data[0] == 0x01 {
+				c.handleControl(string(data[1:]))
 			} else {
 				c.handleInput(data)
 			}
@@ -103,6 +110,8 @@ func (c *inputWsConn) handleControl(text string) {
 		logger.Debug("terminal: ws bound to session %s", msg.SessionID)
 	case "p":
 		c.sendPong()
+	default:
+		logger.Debug("terminal: ws unknown control type=%s", msg.Type)
 	}
 }
 
@@ -112,6 +121,7 @@ func (c *inputWsConn) handleInput(data []byte) {
 	c.mu.Unlock()
 
 	if sid == "" {
+		logger.Debug("terminal: ws input dropped, no session bound")
 		return
 	}
 
