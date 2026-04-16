@@ -36,6 +36,7 @@ type OpenCodeAgent struct {
 	endpoint string
 	cmd     *exec.Cmd
 	waitCh  chan error
+	cancel  context.CancelFunc
 
 	sessionID    string
 	modelInfo    *ModelInfo
@@ -92,37 +93,54 @@ func (a *OpenCodeAgent) emit(event Event) {
 func (a *OpenCodeAgent) Start(ctx context.Context) error {
 	a.setState(StateConnecting)
 
-	endpoint, err := a.spawnAndWaitForPort(ctx)
+	agentCtx, agentCancel := context.WithCancel(ctx)
+	a.cancel = agentCancel
+
+	endpoint, err := a.spawnAndWaitForPort(agentCtx)
 	if err != nil {
 		a.setState(StateError)
+		a.cancel = nil
+		agentCancel()
 		return fmt.Errorf("spawn opencode: %w", err)
 	}
 	a.endpoint = endpoint
 	logger.Info("opencode endpoint resolved: %s", a.endpoint)
 
-	resp, err := a.doGet(ctx, "/global/health")
+	resp, err := a.doGet(agentCtx, "/global/health")
 	if err != nil {
 		a.setState(StateError)
+		a.Kill()
 		return fmt.Errorf("opencode health check failed: %w", err)
 	}
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		a.setState(StateError)
+		a.Kill()
 		return fmt.Errorf("opencode health check returned status %d", resp.StatusCode)
 	}
 
 	a.setState(StateConnected)
 
-	go a.subscribeEvents(ctx)
+	go a.subscribeEvents(agentCtx)
 
 	return nil
 }
 
 func (a *OpenCodeAgent) Kill() error {
 	a.setState(StateDisconnected)
+
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
+
 	if a.cmd != nil && a.cmd.Process != nil {
 		_ = a.cmd.Process.Kill()
+		if a.waitCh != nil {
+			<-a.waitCh
+			a.waitCh = nil
+		}
 	}
 	if a.httpClient != nil {
 		a.httpClient.CloseIdleConnections()
