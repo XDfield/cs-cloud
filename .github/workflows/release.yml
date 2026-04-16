@@ -62,7 +62,7 @@ jobs:
     name: Notify CoStrict Server
     needs: release
     runs-on: ubuntu-latest
-    if: ${{ secrets.COSTRICT_SERVER_URL != '' && secrets.COSTRICT_SYSTEM_TOKEN != '' }}
+    if: ${{ vars.COSTRICT_NOTIFY_ENABLED == 'true' }}
     environment: release-notify
     steps:
       - name: Download release artifacts
