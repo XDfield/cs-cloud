@@ -3,9 +3,10 @@
 package terminal
 
 import (
+	"io"
 	"os"
 	"os/exec"
-	"io"
+	"syscall"
 
 	"github.com/creack/pty"
 )
@@ -16,6 +17,7 @@ func startPty(shell string, cwd string, rows, cols uint16) (io.ReadWriteCloser, 
 		cmd.Dir = cwd
 	}
 	cmd.Env = os.Environ()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
 		Rows: rows,
