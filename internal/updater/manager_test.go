@@ -26,7 +26,7 @@ func TestEndToEndUpgradeFlow(t *testing.T) {
 	expectedSHA := fmt.Sprintf("%x", sha256.Sum256(binaryContent))
 
 	checkResp := map[string]any{
-		"available":    true,
+		"can_update":    true,
 		"version":      "v2.0.0",
 		"download_url": "", // filled below
 		"sha256":       expectedSHA,
@@ -63,13 +63,14 @@ func TestEndToEndUpgradeFlow(t *testing.T) {
 		replacer:   r,
 		policy:     PolicyAuto,
 		interval:   6 * time.Hour,
+		RestartCh:  make(chan struct{}, 1),
 	}
 
 	result, err := mgr.CheckNow(context.Background())
 	if err != nil {
 		t.Fatalf("check failed: %v", err)
 	}
-	if !result.Available {
+	if !result.CanUpdate {
 		t.Fatal("expected update available")
 	}
 	if result.SHA256 != expectedSHA {
@@ -304,6 +305,7 @@ func TestManagerConcurrentApplyProtection(t *testing.T) {
 		policy:     PolicyAuto,
 		interval:   6 * time.Hour,
 		running:    true,
+		RestartCh:  make(chan struct{}, 1),
 	}
 
 	err := mgr.Apply(context.Background(), "")
@@ -318,7 +320,7 @@ func TestManagerConcurrentApplyProtection(t *testing.T) {
 func TestManagerApplyNoUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
-			"available": false,
+			"can_update": false,
 			"version":   "v1.0.0",
 		})
 	}))
@@ -339,7 +341,7 @@ func TestManagerApplyNoUpdate(t *testing.T) {
 func TestManagerApplyVersionMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
-			"available":    true,
+			"can_update":    true,
 			"version":      "v2.0.0",
 			"download_url": "http://localhost:1/file",
 			"sha256":       "abc",
@@ -482,7 +484,7 @@ func TestDownloadSucceedsWithoutSHA256(t *testing.T) {
 func TestManagerDownloadAndVerifyNoURL(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager("http://localhost:1", dir)
-	result := &CheckResult{Available: true, Version: "v2.0.0"}
+	result := &CheckResult{CanUpdate: true, Version: "v2.0.0"}
 
 	_, err := mgr.downloadAndVerify(context.Background(), result)
 	if err == nil {
@@ -525,7 +527,7 @@ func TestConcurrentReplacerAccess(t *testing.T) {
 func TestCheckerWithCancelledContext(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
-		json.NewEncoder(w).Encode(map[string]any{"available": false})
+		json.NewEncoder(w).Encode(map[string]any{"can_update": false})
 	}))
 	defer srv.Close()
 
@@ -550,7 +552,7 @@ func TestCheckResultUserAgent(t *testing.T) {
 		}
 		io.ReadAll(r.Body)
 		json.NewEncoder(w).Encode(map[string]any{
-			"available": true,
+			"can_update": true,
 			"version":   "v2.0.0",
 		})
 	}))

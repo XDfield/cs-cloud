@@ -36,6 +36,32 @@ func (a *App) modeFile() string {
 	return filepath.Join(a.rootDir, "mode")
 }
 
+func (a *App) argsFile() string {
+	return filepath.Join(a.rootDir, "daemon_args")
+}
+
+func (a *App) SaveArgs(args []string) error {
+	if err := a.EnsureRootDir(); err != nil {
+		return err
+	}
+	data := strings.Join(args, "\n")
+	return os.WriteFile(a.argsFile(), []byte(data), 0o644)
+}
+
+func (a *App) LoadArgs() []string {
+	data, err := os.ReadFile(a.argsFile())
+	if err != nil {
+		return nil
+	}
+	var args []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line != "" {
+			args = append(args, line)
+		}
+	}
+	return args
+}
+
 func (a *App) ReadPID() (int, error) {
 	b, err := os.ReadFile(a.pidFile())
 	if err != nil {

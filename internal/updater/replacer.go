@@ -140,10 +140,6 @@ func (r *Replacer) LoadState() (*UpgradeState, error) {
 func (r *Replacer) Cleanup() {
 	os.Remove(filepath.Join(r.upgradesDir, "cs-cloud.bak"))
 	os.Remove(filepath.Join(r.upgradesDir, "cs-cloud-new"))
-	exe, _ := os.Executable()
-	if exe != "" {
-		os.Remove(exe + ".old")
-	}
 }
 
 func (r *Replacer) stateFile() string {

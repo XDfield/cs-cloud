@@ -13,12 +13,12 @@ import (
 	"cs-cloud/internal/localserver"
 	"cs-cloud/internal/logger"
 	"cs-cloud/internal/tunnel"
-	"cs-cloud/internal/updater"
 	"cs-cloud/internal/version"
 )
 
 func runDaemon(a *app.App) error {
 	mode := a.LoadMode()
+	a.SaveArgs(os.Args[1:])
 
 	logger.Init(logger.Config{
 		Dir:        a.RootDir(),
@@ -67,6 +67,9 @@ func runDaemon(a *app.App) error {
 		}
 	}()
 
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
 	if mode == "cloud" {
 		info, err := device.LoadDevice()
 		if err != nil || info == nil {
@@ -80,13 +83,7 @@ func runDaemon(a *app.App) error {
 				logger.Error("tunnel error: %v", err)
 			}
 		}()
-
-		mgr := updater.NewManager(a.CloudBaseURL(), a.RootDir())
-		go mgr.Run(ctx)
 	}
-
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	if runtime.GOOS == "windows" {
 		a.RemoveStopFile()

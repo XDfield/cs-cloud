@@ -94,8 +94,8 @@ func dispatch(a *app.App) error {
 	case "version":
 		printVersion()
 		return nil
-	case "update":
-		return updateCmd(a)
+	case "upgrade":
+		return upgradeCmd(a)
 	case "serve":
 		return serve(a)
 	case "_daemon":
@@ -123,7 +123,7 @@ func printUsage() {
 	printSection("Commands")
 	cmds := [][2]string{
 		{"version", "Show version info"},
-		{"update", "Manage updates (check, apply, rollback, history)"},
+		{"upgrade", "Check and apply upgrades"},
 		{"start", "Start daemon (cloud mode with WS tunnel, or --mode local)"},
 		{"stop", "Stop daemon"},
 		{"restart", "Restart daemon"},

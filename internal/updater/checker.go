@@ -14,7 +14,7 @@ import (
 )
 
 type CheckResult struct {
-	Available      bool   `json:"available"`
+	CanUpdate      bool   `json:"can_update"`
 	Version        string `json:"version"`
 	Changelog      string `json:"changelog,omitempty"`
 	DownloadURL    string `json:"download_url,omitempty"`
