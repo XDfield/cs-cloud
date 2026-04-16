@@ -34,9 +34,9 @@ func runDaemon(a *app.App) error {
 	ctx := context.Background()
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
-	} else {
-		logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
+		return err
 	}
+	logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
 
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		logger.Error("failed to start server: %v", err)

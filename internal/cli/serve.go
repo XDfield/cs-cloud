@@ -20,10 +20,9 @@ func serve(a *app.App) error {
 	srv := localserver.New(localserver.WithVersion(version.Get()))
 
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
-		printError("Failed to init agent: %v", err)
-	} else {
-		printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
+		return fmt.Errorf("failed to init agent: %w", err)
 	}
+	printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
 
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		return err
