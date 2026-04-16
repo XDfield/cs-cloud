@@ -5,6 +5,7 @@ package app
 import (
 	"os"
 	"syscall"
+	"time"
 )
 
 func (a *App) IsProcessRunning(pid int) bool {
@@ -28,6 +29,17 @@ func (a *App) StopDaemon() bool {
 	} else {
 		proc, _ = os.FindProcess(pid)
 		_ = proc.Signal(os.Interrupt)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if !a.IsProcessRunning(pid) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if a.IsProcessRunning(pid) {
+		forceKill(pid)
 	}
 
 	a.RemovePID()
