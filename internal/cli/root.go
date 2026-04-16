@@ -81,6 +81,8 @@ func dispatch(a *app.App) error {
 		return status(a)
 	case "logs":
 		return logs(a)
+	case "logf":
+		return logf(a)
 	case "doctor":
 		return doctor(a)
 	case "register":
@@ -127,6 +129,7 @@ func printUsage() {
 		{"restart", "Restart daemon"},
 		{"status", "Show daemon status"},
 		{"logs", "Show daemon logs"},
+		{"logf", "Tail daemon logs (follow mode)"},
 		{"doctor", "Show diagnostic info"},
 		{"register", "Register device"},
 		{"login", "Login via browser OAuth"},
