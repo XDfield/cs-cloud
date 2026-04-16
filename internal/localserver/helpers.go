@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,13 @@ func readJSON(r *http.Request, v any) error {
 		return nil
 	}
 	return json.Unmarshal(body, v)
+}
+
+func decodeQueryParam(v string) string {
+	if decoded, err := url.QueryUnescape(v); err == nil {
+		return decoded
+	}
+	return v
 }
 
 func generateID() string {

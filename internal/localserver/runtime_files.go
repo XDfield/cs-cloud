@@ -26,7 +26,7 @@ type fileListData struct {
 }
 
 func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
-	dirPath := r.URL.Query().Get("path")
+	dirPath := decodeQueryParam(r.URL.Query().Get("path"))
 	if dirPath == "" {
 		dirPath = "."
 	}
@@ -156,7 +156,7 @@ type fileContentData struct {
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
-	filePath := r.URL.Query().Get("path")
+	filePath := decodeQueryParam(r.URL.Query().Get("path"))
 	if filePath == "" {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "path is required")
 		return

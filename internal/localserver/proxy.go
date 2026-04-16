@@ -1,9 +1,12 @@
 package localserver
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +34,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rewriteFunc func(map[string]string) string
+	var transformFunc func(io.ReadCloser) io.ReadCloser
 	for _, rt := range d.ProxyRoutes() {
 		if r.Method != rt.Method {
 			continue
@@ -38,6 +42,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		cleanPath := strings.TrimPrefix(r.URL.Path, "/api/v1")
 		if matchRoute(cleanPath, rt.Prefix) {
 			rewriteFunc = rt.Rewrite
+			transformFunc = rt.Transform
 			break
 		}
 	}
@@ -49,6 +54,19 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	pathValues := extractPathValues(r)
 	target := rewriteFunc(pathValues)
+
+	if transformFunc != nil && r.Body != nil {
+		r.Body = transformFunc(r.Body)
+		buf, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "INTERNAL", "failed to read request body")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(buf))
+		r.ContentLength = int64(len(buf))
+		r.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	}
 
 	targetAddr := targetURL.Scheme + "://" + targetURL.Host + target
 	start := time.Now()
