@@ -58,7 +58,7 @@ func (s *Server) handleInstanceDispose(w http.ResponseWriter, r *http.Request) {
 	s.manager.KillAll()
 
 	ctx := r.Context()
-	if err := s.manager.InitDefaultAgent(ctx, ""); err != nil {
+	if err := s.manager.InitDefaultAgent(ctx, "", nil); err != nil {
 		logger.Error("failed to restart opencode agent: %v", err)
 	}
 

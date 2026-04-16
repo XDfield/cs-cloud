@@ -31,8 +31,9 @@ type OpenCodeAgent struct {
 	id    string
 	state AgentState
 
-	cliPath string
-	workDir string
+	cliPath  string
+	workDir  string
+	customEnv map[string]string
 	endpoint string
 	cmd     *exec.Cmd
 	waitCh  chan error
@@ -53,10 +54,11 @@ func NewOpenCodeAgent(cfg AgentConfig) *OpenCodeAgent {
 		}
 	}
 	return &OpenCodeAgent{
-		id:      cfg.ID,
-		cliPath: cliPath,
-		workDir: cfg.WorkingDir,
-		state:   StateIdle,
+		id:         cfg.ID,
+		cliPath:    cliPath,
+		workDir:    cfg.WorkingDir,
+		customEnv:  cfg.CustomEnv,
+		state:      StateIdle,
 		httpClient: &http.Client{
 			Timeout: 300 * time.Second,
 		},
@@ -195,7 +197,11 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 	if a.workDir != "" {
 		cmd.Dir = a.workDir
 	}
-	cmd.Env = append(os.Environ(), "OPENCODE_DISABLE_EMBEDDED_WEB_UI=1")
+	env := append(os.Environ(), "OPENCODE_DISABLE_EMBEDDED_WEB_UI=1")
+	for k, v := range a.customEnv {
+		env = append(env, k+"="+v)
+	}
+	cmd.Env = env
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

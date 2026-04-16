@@ -50,6 +50,7 @@ func (d *OpenCodeDriver) CreateAgent(cfg AgentConfig) (Agent, error) {
 		Backend:    "opencode",
 		DriverName: "http",
 		WorkingDir: cfg.WorkingDir,
+		CustomEnv:  cfg.CustomEnv,
 		Extra: map[string]any{
 			"cli_path": cliPath,
 		},
@@ -59,6 +60,12 @@ func (d *OpenCodeDriver) CreateAgent(cfg AgentConfig) (Agent, error) {
 
 func (d *OpenCodeDriver) HealthCheck(ctx context.Context, backend string) (*HealthResult, error) {
 	return nil, fmt.Errorf("health check not supported in spawn mode")
+}
+
+func (d *OpenCodeDriver) HeaderMap() map[string]string {
+	return map[string]string{
+		"X-Workspace-Directory": "x-opencode-directory",
+	}
 }
 
 func (d *OpenCodeDriver) ProxyRoutes() []ProxyRoute {

@@ -32,7 +32,7 @@ func runDaemon(a *app.App) error {
 	srv := localserver.New(localserver.WithVersion(version.Get()))
 
 	ctx := context.Background()
-	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath); err != nil {
+	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
 	} else {
 		logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())

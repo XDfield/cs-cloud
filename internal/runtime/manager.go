@@ -184,7 +184,7 @@ func (m *AgentManager) DefaultBackend() string {
 	return ""
 }
 
-func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string) error {
+func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, agentEnv map[string]string) error {
 	d := agent.NewOpenCodeDriver(cliPath)
 	m.RegisterDriver(d)
 
@@ -202,6 +202,7 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string) err
 		Backend:    "opencode",
 		DriverName: "http",
 		WorkingDir: "",
+		CustomEnv:  agentEnv,
 		Extra:      extra,
 	}
 	return m.CreateAgent(ctx, "default", cfg)

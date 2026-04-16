@@ -14,6 +14,7 @@ type Driver interface {
 	CreateAgent(cfg AgentConfig) (Agent, error)
 	HealthCheck(ctx context.Context, backend string) (*HealthResult, error)
 	ProxyRoutes() []ProxyRoute
+	HeaderMap() map[string]string
 }
 
 type DetectedAgent struct {

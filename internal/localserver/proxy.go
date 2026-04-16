@@ -54,12 +54,19 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
+	headerMap := d.HeaderMap()
+
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.URL.Path = target
 		req.URL.RawPath = ""
 		req.Host = targetURL.Host
+		for from, to := range headerMap {
+			if v := req.Header.Get(from); v != "" {
+				req.Header.Set(to, v)
+			}
+		}
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {

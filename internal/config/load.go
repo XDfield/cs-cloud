@@ -20,6 +20,13 @@ func Load() (*Config, error) {
 		cfg.CloudBaseURL = platform.Getenv("COSTRICT_CLOUD_BASE_URL")
 	}
 
+	if envJSON := platform.Getenv("CS_CLOUD_AGENT_ENV"); envJSON != "" {
+		var env map[string]string
+		if err := json.Unmarshal([]byte(envJSON), &env); err == nil {
+			cfg.AgentEnv = env
+		}
+	}
+
 	if p, err := configFilePath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
 			var fileCfg Config
@@ -35,6 +42,9 @@ func Load() (*Config, error) {
 				}
 				if cfg.AgentCLIPath == "" {
 					cfg.AgentCLIPath = fileCfg.AgentCLIPath
+				}
+				if cfg.AgentEnv == nil && fileCfg.AgentEnv != nil {
+					cfg.AgentEnv = fileCfg.AgentEnv
 				}
 			}
 		}
