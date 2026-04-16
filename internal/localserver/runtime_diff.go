@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 type diffFileEntry struct {
@@ -27,27 +28,58 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		directory = "."
 	}
 
-	absDir, _, err := resolvePath(r, directory)
+	absDir, _, err := s.resolvePath(r, directory)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
 
-	info, err := exec.Command("git", "-C", absDir, "rev-parse", "--is-inside-work-tree").Output()
-	if err != nil || strings.TrimSpace(string(info)) != "true" {
-		writeErr(w, http.StatusBadRequest, "NOT_GIT_REPO", fmt.Sprintf("not a git repository: %s", absDir))
-		return
-	}
-
-	branch := gitBranch(absDir)
-
 	staged := r.URL.Query().Get("staged") == "true"
 	statOnly := r.URL.Query().Get("stat") == "true"
 	filterPath := r.URL.Query().Get("path")
 
-	files := parseDiffStat(absDir, staged, filterPath)
+	var (
+		branch string
+		files  []diffFileEntry
+		diff   string
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		notGit bool
+	)
 
-	var diff string
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		b, err := exec.Command("git", "-C", absDir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+		if err != nil {
+			mu.Lock()
+			notGit = true
+			mu.Unlock()
+			return
+		}
+		branch = strings.TrimSpace(string(b))
+	}()
+
+	go func() {
+		defer wg.Done()
+		entries, err := parseDiffStatErr(absDir, staged, filterPath)
+		if err != nil {
+			mu.Lock()
+			notGit = true
+			mu.Unlock()
+			return
+		}
+		files = entries
+	}()
+
+	wg.Wait()
+
+	if notGit {
+		writeErr(w, http.StatusBadRequest, "NOT_GIT_REPO", fmt.Sprintf("not a git repository: %s", absDir))
+		return
+	}
+
 	if !statOnly {
 		diff = runGitDiff(absDir, staged, filterPath)
 	}
@@ -60,7 +92,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func parseDiffStat(dir string, staged bool, filterPath string) []diffFileEntry {
+func parseDiffStatErr(dir string, staged bool, filterPath string) ([]diffFileEntry, error) {
 	args := []string{"-C", dir, "diff", "--numstat"}
 	if staged {
 		args = append(args, "--cached")
@@ -71,7 +103,7 @@ func parseDiffStat(dir string, staged bool, filterPath string) []diffFileEntry {
 
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	var entries []diffFileEntry
@@ -104,7 +136,7 @@ func parseDiffStat(dir string, staged bool, filterPath string) []diffFileEntry {
 	if len(entries) == 0 && filterPath == "" {
 		entries = []diffFileEntry{}
 	}
-	return entries
+	return entries, nil
 }
 
 func runGitDiff(dir string, staged bool, filterPath string) string {
