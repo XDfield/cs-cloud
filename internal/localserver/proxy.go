@@ -5,6 +5,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"cs-cloud/internal/logger"
 )
@@ -50,7 +51,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	target := rewriteFunc(pathValues)
 
 	targetAddr := targetURL.Scheme + "://" + targetURL.Host + target
-	logger.Info("proxy %s %s -> %s", r.Method, r.URL.Path, targetAddr)
+	start := time.Now()
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
@@ -70,12 +71,12 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		logger.Error("proxy %s %s -> %s failed: %v", r.Method, r.URL.Path, targetAddr, err)
+		logger.Error("proxy %s %s -> %s %d %s err: %v", r.Method, r.URL.Path, targetAddr, http.StatusBadGateway, time.Since(start), err)
 		http.Error(w, "bad gateway", http.StatusBadGateway)
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
-		logger.Info("proxy %s %s -> %s %d", r.Method, r.URL.Path, targetAddr, resp.StatusCode)
+		logger.Info("proxy %s %s -> %s %d %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start))
 		return nil
 	}
 
