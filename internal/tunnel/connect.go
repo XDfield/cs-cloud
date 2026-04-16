@@ -73,7 +73,8 @@ func runSession(ctx context.Context, gatewayURL, deviceID, deviceToken string, l
 	defer wsNetConn.Close()
 
 	yamuxCfg := yamux.DefaultConfig()
-	yamuxCfg.EnableKeepAlive = false
+	yamuxCfg.EnableKeepAlive = true
+	yamuxCfg.KeepAliveInterval = 15 * time.Second
 	yamuxCfg.ConnectionWriteTimeout = 60 * time.Second
 
 	session, err := yamux.Client(wsNetConn, yamuxCfg)
