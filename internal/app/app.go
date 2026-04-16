@@ -16,7 +16,7 @@ type App struct {
 }
 
 func New() (*App, error) {
-	root, err := os.UserHomeDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve user home: %w", err)
 	}
@@ -24,7 +24,7 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{rootDir: filepath.Join(root, ".cs-cloud"), cfg: cfg}, nil
+	return &App{rootDir: filepath.Join(home, ".costrict", "cs-cloud"), cfg: cfg}, nil
 }
 
 func (a *App) RootDir() string  { return a.rootDir }

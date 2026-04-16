@@ -34,7 +34,7 @@ func DataDir() string {
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".cs-cloud")
+	return filepath.Join(home, ".costrict", "cs-cloud")
 }
 
 func CoStrictShareDir() string {

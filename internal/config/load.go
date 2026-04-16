@@ -48,5 +48,5 @@ func configFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".cs-cloud", "config.json"), nil
+	return filepath.Join(home, ".costrict", "cs-cloud", "config.json"), nil
 }
