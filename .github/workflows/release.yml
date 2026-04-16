@@ -49,3 +49,65 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: |
+            dist/cs-cloud-*
+            dist/checksums.txt
+
+  notify-server:
+    name: Notify CoStrict Server
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ secrets.COSTRICT_SERVER_URL != '' && secrets.COSTRICT_SYSTEM_TOKEN != '' }}
+    environment: release-notify
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+
+      - name: Build release payload
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          BODY=$(gh release view "${TAG}" --json body -q '.body // empty')
+          {
+            printf '{"version":"%s","changelog":' "$VERSION"
+            if [ -n "$BODY" ]; then
+              printf '%s' "$(printf '%s' "$BODY" | jq -Rs .)"
+            else
+              printf 'null'
+            fi
+            printf ',"assets":['
+            first=true
+            for f in dist/cs-cloud-*; do
+              [ -f "$f" ] || continue
+              [[ "$f" == *.sha256 ]] && continue
+              base=$(basename "$f")
+              platform="${base#cs-cloud-}"
+              sha=$(sha256sum "$f" | awk '{print $1}')
+              size=$(stat -c%s "$f")
+              dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${base}"
+              [ "$first" = true ] && first=false || printf ','
+              printf '{"platform":"%s","downloadUrl":"%s","sha256":"%s","binarySize":%d}' "$platform" "$dl_url" "$sha" "$size"
+            done
+            printf ']}'
+          } > /tmp/release-payload.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release on server
+        run: |
+          curl -sf -X POST \
+            "${COSTRICT_SERVER_URL}/api/releases" \
+            -H "Content-Type: application/json" \
+            -H "X-System-Token: ${COSTRICT_SYSTEM_TOKEN}" \
+            -d @/tmp/release-payload.json
+        env:
+          COSTRICT_SERVER_URL: ${{ secrets.COSTRICT_SERVER_URL }}
+          COSTRICT_SYSTEM_TOKEN: ${{ secrets.COSTRICT_SYSTEM_TOKEN }}
