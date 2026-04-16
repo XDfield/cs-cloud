@@ -85,6 +85,7 @@ jobs:
               [[ "$f" == *.sha256 ]] && continue
               base=$(basename "$f")
               platform="${base#cs-cloud-}"
+              platform="${platform%.exe}"
               sha=$(sha256sum "$f" | awk '{print $1}')
               size=$(stat -c%s "$f")
               dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${base}"
