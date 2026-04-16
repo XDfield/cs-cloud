@@ -13,7 +13,7 @@ func (a *App) pidFile() string {
 }
 
 func (a *App) logFile() string {
-	return filepath.Join(a.rootDir, "cloud.log")
+	return filepath.Join(a.rootDir, "app.log")
 }
 
 func (a *App) stopFile() string {
