@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"cs-cloud/internal/config"
 	"cs-cloud/internal/runtime"
 	"cs-cloud/internal/terminal"
 )
@@ -21,13 +22,15 @@ type Server struct {
 	termMgr    *terminal.TerminalManager
 	termH      *terminal.Handlers
 	inputWsH   *terminal.InputWsHandler
+	runtimeCfg config.RuntimeConfig
 }
 
 func New(opts ...Option) *Server {
 	initStartTime()
 
 	s := &Server{
-		eventBus: runtime.NewEventBus(),
+		eventBus:   runtime.NewEventBus(),
+		runtimeCfg: defaultRuntimeConfig(),
 	}
 	for _, o := range opts {
 		o(s)
@@ -43,6 +46,7 @@ func New(opts ...Option) *Server {
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", api))
 
 	api.HandleFunc("GET /runtime/health", s.handleHealth)
+	api.HandleFunc("GET /runtime/config", s.handleRuntimeConfig)
 	api.HandleFunc("GET /runtime/files", s.handleFileList)
 	api.HandleFunc("GET /runtime/files/content", s.handleFileContent)
 	api.HandleFunc("GET /runtime/find/file", s.handleFindFiles)
@@ -104,6 +108,10 @@ func WithVersion(v string) Option {
 	return func(s *Server) { s.version = v }
 }
 
+func WithRuntimeConfig(cfg config.RuntimeConfig) Option {
+	return func(s *Server) { s.runtimeCfg = cfg }
+}
+
 func (s *Server) Manager() *runtime.AgentManager {
 	return s.manager
 }
@@ -137,6 +145,7 @@ func (s *Server) Port() int {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.manager.KillAll()
 	s.termMgr.CloseAll()
 	return s.http.Shutdown(ctx)
 }

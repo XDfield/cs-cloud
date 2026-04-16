@@ -26,7 +26,7 @@ func (s *Server) handleFindFiles(w http.ResponseWriter, r *http.Request) {
 		dir = "."
 	}
 
-	absDir, _, err := resolvePath(r, dir)
+	absDir, _, err := s.resolvePath(r, dir)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

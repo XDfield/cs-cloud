@@ -22,7 +22,7 @@ func (s *Server) handlePath(w http.ResponseWriter, r *http.Request) {
 		directory = "."
 	}
 
-	absDir, _, err := resolvePath(r, directory)
+	absDir, _, err := s.resolvePath(r, directory)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -44,7 +44,7 @@ func (s *Server) handleVcs(w http.ResponseWriter, r *http.Request) {
 		directory = "."
 	}
 
-	absDir, _, err := resolvePath(r, directory)
+	absDir, _, err := s.resolvePath(r, directory)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

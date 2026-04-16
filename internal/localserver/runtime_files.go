@@ -39,7 +39,7 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	absPath, _, err := resolvePath(r, dirPath)
+	absPath, _, err := s.resolvePath(r, dirPath)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -176,7 +176,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	absPath, _, err := resolvePath(r, filePath)
+	absPath, _, err := s.resolvePath(r, filePath)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
