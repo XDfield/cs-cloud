@@ -20,7 +20,13 @@ func (a *App) StopDaemon() bool {
 	pid, err := a.ReadPID()
 	if err != nil || !a.IsProcessRunning(pid) {
 		a.RemovePID()
+		a.RemoveAgentPID()
 		return false
+	}
+
+	if agentPID, err := a.ReadAgentPID(); err == nil && agentPID > 0 {
+		forceKill(agentPID)
+		a.RemoveAgentPID()
 	}
 
 	proc, _ := os.FindProcess(-pid)

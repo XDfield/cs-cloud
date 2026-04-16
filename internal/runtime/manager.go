@@ -143,6 +143,17 @@ func (m *AgentManager) KillAll() {
 	}
 }
 
+func (m *AgentManager) AgentPID() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, a := range m.agents {
+		if pid := a.PID(); pid > 0 {
+			return pid
+		}
+	}
+	return 0
+}
+
 func (m *AgentManager) DetectAgents(ctx context.Context) ([]agent.DetectedAgent, error) {
 	m.mu.RLock()
 	drivers := make([]agent.Driver, 0, len(m.drivers))

@@ -68,6 +68,12 @@ func NewOpenCodeAgent(cfg AgentConfig) *OpenCodeAgent {
 func (a *OpenCodeAgent) ID() string       { return a.id }
 func (a *OpenCodeAgent) Backend() string   { return "opencode" }
 func (a *OpenCodeAgent) Driver() string    { return "http" }
+func (a *OpenCodeAgent) PID() int {
+	if a.cmd != nil && a.cmd.Process != nil {
+		return a.cmd.Process.Pid
+	}
+	return 0
+}
 func (a *OpenCodeAgent) SessionID() string { return a.sessionID }
 func (a *OpenCodeAgent) Endpoint() string  { return a.endpoint }
 func (a *OpenCodeAgent) State() AgentState {
@@ -138,16 +144,47 @@ func (a *OpenCodeAgent) Kill() error {
 	}
 
 	if a.cmd != nil && a.cmd.Process != nil {
-		_ = a.cmd.Process.Kill()
-		if a.waitCh != nil {
-			<-a.waitCh
-			a.waitCh = nil
-		}
+		a.gracefulShutdown(5 * time.Second)
 	}
 	if a.httpClient != nil {
 		a.httpClient.CloseIdleConnections()
 	}
 	return nil
+}
+
+func (a *OpenCodeAgent) gracefulShutdown(timeout time.Duration) {
+	if a.endpoint != "" && a.httpClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, a.endpoint+"/global/dispose", nil)
+		if req != nil {
+			resp, err := a.httpClient.Do(req)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}
+		cancel()
+	}
+
+	signalTerminate(a.cmd.Process.Pid)
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if a.waitCh == nil {
+			return
+		}
+		select {
+		case <-a.waitCh:
+			a.waitCh = nil
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	killProcessTree(a.cmd.Process.Pid)
+	if a.waitCh != nil {
+		<-a.waitCh
+		a.waitCh = nil
+	}
 }
 
 func (a *OpenCodeAgent) SendMessage(ctx context.Context, msg PromptMessage) error {
@@ -202,6 +239,7 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 		env = append(env, k+"="+v)
 	}
 	cmd.Env = env
+	setCmdProcessGroup(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

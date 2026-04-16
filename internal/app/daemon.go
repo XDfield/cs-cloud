@@ -12,6 +12,10 @@ func (a *App) pidFile() string {
 	return filepath.Join(a.rootDir, "cs-cloud.pid")
 }
 
+func (a *App) agentPidFile() string {
+	return filepath.Join(a.rootDir, "agent.pid")
+}
+
 func (a *App) logFile() string {
 	return filepath.Join(a.rootDir, "app.log")
 }
@@ -53,6 +57,29 @@ func (a *App) WritePID(pid int) error {
 
 func (a *App) RemovePID() {
 	os.Remove(a.pidFile())
+}
+
+func (a *App) WriteAgentPID(pid int) error {
+	if err := a.EnsureRootDir(); err != nil {
+		return err
+	}
+	return os.WriteFile(a.agentPidFile(), []byte(strconv.Itoa(pid)), 0o600)
+}
+
+func (a *App) ReadAgentPID() (int, error) {
+	b, err := os.ReadFile(a.agentPidFile())
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		return 0, err
+	}
+	return pid, nil
+}
+
+func (a *App) RemoveAgentPID() {
+	os.Remove(a.agentPidFile())
 }
 
 func (a *App) DaemonStatus() (bool, int) {

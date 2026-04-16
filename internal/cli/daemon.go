@@ -38,6 +38,12 @@ func runDaemon(a *app.App) error {
 	}
 	logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
 
+	if pid := srv.Manager().AgentPID(); pid > 0 {
+		if err := a.WriteAgentPID(pid); err != nil {
+			logger.Warn("failed to save agent pid: %v", err)
+		}
+	}
+
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		logger.Error("failed to start server: %v", err)
 		return err
@@ -105,6 +111,7 @@ func runDaemon(a *app.App) error {
 	a.SaveState("stopped")
 	a.SaveServerURL("")
 	a.RemovePID()
+	a.RemoveAgentPID()
 
 	logger.Info("daemon stopped")
 	return nil
