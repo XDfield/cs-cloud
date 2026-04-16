@@ -54,9 +54,5 @@ func Load() (*Config, error) {
 }
 
 func configFilePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".costrict", "cs-cloud", "config.json"), nil
+	return filepath.Join(platform.AppDir(), "config.json"), nil
 }

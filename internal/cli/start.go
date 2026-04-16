@@ -76,6 +76,9 @@ func start(a *app.App) error {
 	if p := platform.AuthPath(); p != "" {
 		daemonArgs = append(daemonArgs, "--auth-path", p)
 	}
+	if d := platform.DataDir(); d != "" {
+		daemonArgs = append(daemonArgs, "--data-dir", d)
+	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)
 	cmd.Stdout = logFd

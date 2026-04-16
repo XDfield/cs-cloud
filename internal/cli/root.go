@@ -10,12 +10,12 @@ import (
 )
 
 func Execute() error {
+	parseGlobalFlags()
+
 	a, err := app.New()
 	if err != nil {
 		return err
 	}
-
-	parseGlobalFlags()
 
 	return dispatch(a)
 }
@@ -29,6 +29,11 @@ func parseGlobalFlags() {
 			i++
 		case len(args[i]) > 11 && args[i][:11] == "--auth-path=":
 			platform.SetAuthPath(args[i][11:])
+		case args[i] == "--data-dir" && i+1 < len(args):
+			platform.SetDataDir(args[i+1])
+			i++
+		case len(args[i]) > 11 && args[i][:11] == "--data-dir=":
+			platform.SetDataDir(args[i][11:])
 		}
 	}
 }
@@ -41,6 +46,9 @@ func commandArgs() []string {
 		case args[i] == "--auth-path" && i+1 < len(args):
 			i++
 		case len(args[i]) > 11 && args[i][:11] == "--auth-path=":
+		case args[i] == "--data-dir" && i+1 < len(args):
+			i++
+		case len(args[i]) > 11 && args[i][:11] == "--data-dir=":
 		default:
 			rest = append(rest, args[i])
 		}
@@ -117,6 +125,7 @@ func printUsage() {
 	printSection("Flags")
 	fmt.Print(renderKV([][2]string{
 		{"--auth-path", "Path to auth.json (default: ~/.costrict/share/auth.json)"},
+		{"--data-dir", "Base data directory (default: ~/.costrict)"},
 		{"--mode, -m", "Daemon mode: cloud (default) or local"},
 	}))
 
