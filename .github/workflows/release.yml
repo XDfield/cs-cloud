@@ -71,12 +71,10 @@ jobs:
         id: release-meta
         run: |
           BODY=$(gh release view "${GITHUB_REF_NAME}" --json body -q '.body // empty')
-          TARGET_COMMITISH=$(git rev-list -n 1 "${GITHUB_REF_NAME}")
           {
             echo 'body<<EOF'
             printf '%s\n' "$BODY"
             echo 'EOF'
-            echo "target_commitish=${TARGET_COMMITISH}"
           } >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,13 +86,19 @@ jobs:
           OWNER="xdfield"
           REPO="cs-cloud-release"
           TAG="${GITHUB_REF_NAME}"
-          TARGET_COMMITISH="${TARGET_COMMITISH}"
+          TARGET_REF=$(curl -fsS \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}?access_token=${GITEE_ACCESS_TOKEN}" \
+            | jq -r '.default_branch // empty')
+
+          if [ -z "$TARGET_REF" ]; then
+            TARGET_REF=master
+          fi
 
           create_resp=$(curl -sS -X POST \
             "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags" \
             --data-urlencode "access_token=${GITEE_ACCESS_TOKEN}" \
             --data-urlencode "tag_name=${TAG}" \
-            --data-urlencode "ref=${TARGET_COMMITISH}")
+            --data-urlencode "ref=${TARGET_REF}")
 
           if printf '%s' "$create_resp" | jq -e '.name? // .commit?.sha? // empty' > /dev/null; then
             exit 0
@@ -108,7 +112,6 @@ jobs:
           printf '%s\n' "$create_resp"
           exit 1
         env:
-          TARGET_COMMITISH: ${{ steps.release-meta.outputs.target_commitish }}
           GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
 
       - name: Create or get Gitee release
