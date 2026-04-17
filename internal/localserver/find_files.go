@@ -39,7 +39,8 @@ func (s *Server) handleFindFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var results []string
-	query = strings.ToLower(query)
+	query = filepath.ToSlash(strings.ToLower(query))
+	matchRelativePath := strings.Contains(query, "/")
 
 	err = filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -62,10 +63,15 @@ func (s *Server) handleFindFiles(w http.ResponseWriter, r *http.Request) {
 			return filepath.SkipDir
 		}
 
-		name := filepath.Base(path)
-		nameLower := strings.ToLower(name)
+		candidate := strings.ToLower(filepath.Base(path))
+		if matchRelativePath {
+			candidate = filepath.ToSlash(strings.ToLower(rel))
+		}
+		if d.IsDir() {
+			candidate += "/"
+		}
 
-		if query != "" && !strings.Contains(nameLower, query) {
+		if query != "" && !strings.Contains(candidate, query) {
 			return nil
 		}
 
