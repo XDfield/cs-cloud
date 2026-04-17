@@ -23,6 +23,7 @@ type Server struct {
 	termH      *terminal.Handlers
 	inputWsH   *terminal.InputWsHandler
 	runtimeCfg config.RuntimeConfig
+	cfg        *config.Config
 }
 
 func New(opts ...Option) *Server {
@@ -37,7 +38,7 @@ func New(opts ...Option) *Server {
 	}
 	s.manager = runtime.NewAgentManager(s.eventBus)
 
-	s.termMgr = terminal.NewManager()
+	s.termMgr = terminal.NewManager(terminal.WithConfig(s.cfg))
 	s.termH = terminal.NewHandlers(s.termMgr)
 	s.inputWsH = terminal.NewInputWsHandler(s.termMgr)
 
@@ -110,6 +111,10 @@ func WithVersion(v string) Option {
 
 func WithRuntimeConfig(cfg config.RuntimeConfig) Option {
 	return func(s *Server) { s.runtimeCfg = cfg }
+}
+
+func WithConfig(cfg *config.Config) Option {
+	return func(s *Server) { s.cfg = cfg }
 }
 
 func (s *Server) Manager() *runtime.AgentManager {

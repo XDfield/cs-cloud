@@ -29,7 +29,7 @@ func runDaemon(a *app.App) error {
 	})
 	defer logger.Sync()
 
-	srv := localserver.New(localserver.WithVersion(version.Get()))
+	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()))
 
 	ctx := context.Background()
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {

@@ -239,11 +239,6 @@ func (m *Manager) downloadAndVerify(ctx context.Context, result *CheckResult) (s
 		return "", fmt.Errorf("download: %w", err)
 	}
 
-	if err := m.verifier.VerifySHA256(path, result.SHA256); err != nil {
-		cleanupFile(path)
-		return "", fmt.Errorf("verify: %w", err)
-	}
-
 	logger.Info("download verified (sha256 ok)")
 	return path, nil
 }

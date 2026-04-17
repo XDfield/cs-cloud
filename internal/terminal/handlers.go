@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"errors"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -66,7 +67,15 @@ func (h *Handlers) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	s, err := h.mgr.Create(req.Cwd, req.Rows, req.Cols)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "SESSION_LIMIT", err.Error())
+		logger.Error("terminal: HandleCreate failed cwd=%q rows=%d cols=%d err=%v", req.Cwd, req.Rows, req.Cols, err)
+		switch {
+		case errors.Is(err, ErrSessionLimit):
+			writeErr(w, http.StatusConflict, "SESSION_LIMIT", err.Error())
+		case IsSessionCreateError(err):
+			writeErr(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", err.Error())
+		default:
+			writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		}
 		return
 	}
 

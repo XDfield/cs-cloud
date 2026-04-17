@@ -19,13 +19,13 @@ jobs:
         with:
           go-version-file: go.mod
         id: setup-go
-      - name: Generate SHA256 per binary
+      - name: Generate SHA256 per archive
         run: |
           cat > .goreleaser-after.sh << 'SCRIPT'
           #!/bin/env bash
           set -euo pipefail
           DIST_DIR="$1"
-          for f in "$DIST_DIR"/cs-cloud-*; do
+          for f in "$DIST_DIR"/cs-cloud-*.{tar.gz,zip}; do
             [ -f "$f" ] || continue
             base=$(basename "$f")
             sha=$(sha256sum "$f" | awk '{print $1}')
@@ -40,9 +40,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GO_VERSION: go${{ steps.setup-go.outputs.go-version }}
-      - name: Upload per-binary SHA256
+      - name: Upload per-archive SHA256
         run: |
-          for f in dist/cs-cloud-*.sha256; do
+          for f in dist/cs-cloud-*.{tar.gz,zip}.sha256; do
             [ -f "$f" ] || continue
             base=$(basename "$f")
             gh release upload "${GITHUB_REF_NAME}" "$f" --clobber
@@ -50,9 +50,156 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  sync-to-gitee:
+    name: Sync Release To Gitee
+    needs: release
+    runs-on: ubuntu-latest
+    environment: release-notify
+    outputs:
+      url_map: ${{ steps.upload.outputs.url_map }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release binaries
+        run: |
+          mkdir -p dist
+          gh release download "${GITHUB_REF_NAME}" -D dist -p "cs-cloud-*" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read GitHub release body
+        id: release-meta
+        run: |
+          BODY=$(gh release view "${GITHUB_REF_NAME}" --json body -q '.body // empty')
+          TARGET_COMMITISH=$(git rev-list -n 1 "${GITHUB_REF_NAME}")
+          {
+            echo 'body<<EOF'
+            printf '%s\n' "$BODY"
+            echo 'EOF'
+            echo "target_commitish=${TARGET_COMMITISH}"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Gitee tag if needed
+        run: |
+          set -euo pipefail
+
+          OWNER="xdfield"
+          REPO="cs-cloud-release"
+          TAG="${GITHUB_REF_NAME}"
+          TARGET_COMMITISH="${TARGET_COMMITISH}"
+
+          create_resp=$(curl -sS -X POST \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags" \
+            --data-urlencode "access_token=${GITEE_ACCESS_TOKEN}" \
+            --data-urlencode "tag_name=${TAG}" \
+            --data-urlencode "ref=${TARGET_COMMITISH}")
+
+          if printf '%s' "$create_resp" | jq -e '.name? // .commit?.sha? // empty' > /dev/null; then
+            exit 0
+          fi
+
+          err=$(printf '%s' "$create_resp" | jq -r '.message // .error // empty')
+          if printf '%s' "$err" | grep -qi 'exist'; then
+            exit 0
+          fi
+
+          printf '%s\n' "$create_resp"
+          exit 1
+        env:
+          TARGET_COMMITISH: ${{ steps.release-meta.outputs.target_commitish }}
+          GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
+
+      - name: Create or get Gitee release
+        id: gitee-release
+        run: |
+          set -euo pipefail
+
+          OWNER="xdfield"
+          REPO="cs-cloud-release"
+          TAG="${GITHUB_REF_NAME}"
+
+          existing=$(curl -fsS \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_ACCESS_TOKEN}" \
+            || true)
+
+          if [ -n "$existing" ] && [ "$(printf '%s' "$existing" | jq -r '.id // empty')" != "" ]; then
+            release_id=$(printf '%s' "$existing" | jq -r '.id')
+          else
+            created=$(curl -fsS -X POST \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
+              --data-urlencode "access_token=${GITEE_ACCESS_TOKEN}" \
+              --data-urlencode "tag_name=${TAG}" \
+              --data-urlencode "name=${TAG}" \
+              --data-urlencode "body=${BODY}" \
+              --data-urlencode "prerelease=false")
+            release_id=$(printf '%s' "$created" | jq -r '.id')
+            if [ -z "$release_id" ]; then
+              printf '%s\n' "$created"
+              exit 1
+            fi
+          fi
+
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+        env:
+          BODY: ${{ steps.release-meta.outputs.body }}
+          GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
+
+      - name: Upload binaries to Gitee release
+        id: upload
+        run: |
+          set -euo pipefail
+
+          OWNER="xdfield"
+          REPO="cs-cloud-release"
+          TAG="${GITHUB_REF_NAME}"
+          RELEASE_ID="${{ steps.gitee-release.outputs.release_id }}"
+          MAP_FILE=$(mktemp)
+          printf '{}' > "$MAP_FILE"
+
+          attachments=$(curl -fsS \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_ACCESS_TOKEN}" \
+            || printf '[]')
+
+          for f in dist/cs-cloud-*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+
+            attach_id=$(printf '%s' "$attachments" | jq -r --arg name "$base" '.[] | select(.name == $name) | .id' | head -n 1)
+            if [ -n "$attach_id" ]; then
+              curl -fsS -X DELETE \
+                "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files/${attach_id}?access_token=${GITEE_ACCESS_TOKEN}" \
+                > /dev/null
+            fi
+
+            resp=$(curl -fsS -X POST \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_ACCESS_TOKEN}" \
+              -F "file=@${f}")
+
+            url=$(printf '%s' "$resp" | jq -r '.browser_download_url // .download_url // .url // empty')
+            if [ -z "$url" ]; then
+              url="https://gitee.com/${OWNER}/${REPO}/releases/download/${TAG}/${base}"
+            fi
+
+            jq --arg k "$base" --arg v "$url" '. + {($k): $v}' "$MAP_FILE" > "${MAP_FILE}.next"
+            mv "${MAP_FILE}.next" "$MAP_FILE"
+          done
+
+          {
+            echo 'url_map<<EOF'
+            cat "$MAP_FILE"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
+
   notify-server:
     name: Notify CoStrict Server
-    needs: release
+    needs:
+      - release
+      - sync-to-gitee
     runs-on: ubuntu-latest
     if: ${{ vars.COSTRICT_NOTIFY_ENABLED == 'true' }}
     environment: release-notify
@@ -71,6 +218,7 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           BODY=$(gh release view "${TAG}" --json body -q '.body // empty')
+          GITEE_URL_MAP='${{ needs.sync-to-gitee.outputs.url_map }}'
           {
             printf '{"version":"%s","changelog":' "$VERSION"
             if [ -n "$BODY" ]; then
@@ -85,10 +233,14 @@ jobs:
               [[ "$f" == *.sha256 ]] && continue
               base=$(basename "$f")
               platform="${base#cs-cloud-}"
-              platform="${platform%.exe}"
+              platform="${platform%.tar.gz}"
+              platform="${platform%.zip}"
               sha=$(sha256sum "$f" | awk '{print $1}')
               size=$(stat -c%s "$f")
-              dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${base}"
+              dl_url=$(printf '%s' "$GITEE_URL_MAP" | jq -r --arg name "$base" '.[$name] // empty')
+              if [ -z "$dl_url" ]; then
+                dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${base}"
+              fi
               [ "$first" = true ] && first=false || printf ','
               printf '{"platform":"%s","downloadUrl":"%s","sha256":"%s","binarySize":%d}' "$platform" "$dl_url" "$sha" "$size"
             done
