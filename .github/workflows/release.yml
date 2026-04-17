@@ -98,7 +98,7 @@ jobs:
             "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags" \
             --data-urlencode "access_token=${GITEE_ACCESS_TOKEN}" \
             --data-urlencode "tag_name=${TAG}" \
-            --data-urlencode "ref=${TARGET_REF}")
+            --data-urlencode "refs=${TARGET_REF}")
 
           if printf '%s' "$create_resp" | jq -e '.name? // .commit?.sha? // empty' > /dev/null; then
             exit 0
