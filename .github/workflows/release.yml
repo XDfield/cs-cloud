@@ -166,41 +166,52 @@ jobs:
           REPO="cs-cloud-release"
           TAG="${GITHUB_REF_NAME}"
           RELEASE_ID="${{ steps.gitee-release.outputs.release_id }}"
-          MAP_FILE=$(mktemp)
-          printf '{}' > "$MAP_FILE"
+          MAP_DIR=$(mktemp -d)
 
           attachments=$(curl -fsS \
             "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_ACCESS_TOKEN}" \
             || printf '[]')
 
+          i=0
           for f in dist/cs-cloud-*; do
             [ -f "$f" ] || continue
-            base=$(basename "$f")
+            i=$((i + 1))
+            (
+              base=$(basename "$f")
+              map_file="${MAP_DIR}/${i}.json"
 
-            attach_id=$(printf '%s' "$attachments" | jq -r --arg name "$base" '.[] | select(.name == $name) | .id' | head -n 1)
-            if [ -n "$attach_id" ]; then
-              curl -fsS -X DELETE \
-                "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files/${attach_id}?access_token=${GITEE_ACCESS_TOKEN}" \
-                > /dev/null
-            fi
+              attach_id=$(printf '%s' "$attachments" | jq -r --arg name "$base" '.[] | select(.name == $name) | .id' | head -n 1)
+              if [ -n "$attach_id" ]; then
+                curl -fsS -X DELETE \
+                  "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files/${attach_id}?access_token=${GITEE_ACCESS_TOKEN}" \
+                  > /dev/null
+              fi
 
-            resp=$(curl -fsS -X POST \
-              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_ACCESS_TOKEN}" \
-              -F "file=@${f}")
+              resp=$(curl -fsS -X POST \
+                "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
+                -F "access_token=${GITEE_ACCESS_TOKEN}" \
+                -F "file=@${f}")
 
-            url=$(printf '%s' "$resp" | jq -r '.browser_download_url // .download_url // .url // empty')
-            if [ -z "$url" ]; then
-              url="https://gitee.com/${OWNER}/${REPO}/releases/download/${TAG}/${base}"
-            fi
+              url=$(printf '%s' "$resp" | jq -r '.browser_download_url // .download_url // .url // empty')
+              if [ -z "$url" ]; then
+                url="https://gitee.com/${OWNER}/${REPO}/releases/download/${TAG}/${base}"
+              fi
 
-            jq --arg k "$base" --arg v "$url" '. + {($k): $v}' "$MAP_FILE" > "${MAP_FILE}.next"
-            mv "${MAP_FILE}.next" "$MAP_FILE"
+              jq -n --arg k "$base" --arg v "$url" '{($k): $v}' > "$map_file"
+            ) &
           done
+
+          wait
+
+          if compgen -G "${MAP_DIR}/*.json" > /dev/null; then
+            jq -s 'add' "${MAP_DIR}"/*.json > "${MAP_DIR}/url_map.json"
+          else
+            printf '{}' > "${MAP_DIR}/url_map.json"
+          fi
 
           {
             echo 'url_map<<EOF'
-            cat "$MAP_FILE"
+            cat "${MAP_DIR}/url_map.json"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
         env:
