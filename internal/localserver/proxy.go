@@ -94,7 +94,17 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
-		logger.Info("proxy %s %s -> %s %d %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start))
+		if resp.StatusCode >= 400 {
+			body, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				logger.Error("proxy %s %s -> %s %d %s, failed to read response body: %v", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start), readErr)
+				return nil
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			logger.Error("proxy %s %s -> %s %d %s, body: %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start), body)
+		} else {
+			logger.Info("proxy %s %s -> %s %d %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start))
+		}
 		return nil
 	}
 
