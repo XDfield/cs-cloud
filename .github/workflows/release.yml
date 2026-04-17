@@ -105,7 +105,7 @@ jobs:
           fi
 
           err=$(printf '%s' "$create_resp" | jq -r '.message // .error // empty')
-          if printf '%s' "$err" | grep -qi 'exist'; then
+          if printf '%s' "$err" | grep -Eqi 'exist|已存在'; then
             exit 0
           fi
 
