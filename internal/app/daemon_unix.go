@@ -25,17 +25,11 @@ func (a *App) StopDaemon() bool {
 	}
 
 	if agentPID, err := a.ReadAgentPID(); err == nil && agentPID > 0 {
-		forceKill(agentPID)
+		forceKillTree(agentPID)
 		a.RemoveAgentPID()
 	}
 
-	proc, _ := os.FindProcess(-pid)
-	if proc != nil {
-		_ = proc.Signal(os.Interrupt)
-	} else {
-		proc, _ = os.FindProcess(pid)
-		_ = proc.Signal(os.Interrupt)
-	}
+	signalInterruptTree(pid)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -45,7 +39,7 @@ func (a *App) StopDaemon() bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if a.IsProcessRunning(pid) {
-		forceKill(pid)
+		forceKillTree(pid)
 	}
 
 	a.RemovePID()
@@ -53,7 +47,17 @@ func (a *App) StopDaemon() bool {
 	return true
 }
 
-func forceKill(pid int) {
+func signalInterruptTree(pid int) {
+	_ = syscall.Kill(-pid, syscall.SIGINT)
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	_ = proc.Signal(os.Interrupt)
+}
+
+func forceKillTree(pid int) {
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return

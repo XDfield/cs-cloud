@@ -2,8 +2,13 @@
 
 package cli
 
-import "os/exec"
+import (
+	"os/exec"
+	"syscall"
+)
 
 func newDaemonCmd(exe string, args []string) *exec.Cmd {
-	return exec.Command(exe, args...)
+	cmd := exec.Command(exe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
 }
