@@ -17,7 +17,7 @@ func serve(a *app.App) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()))
+	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		return fmt.Errorf("failed to init agent: %w", err)

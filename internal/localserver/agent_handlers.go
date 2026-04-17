@@ -3,6 +3,7 @@ package localserver
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"time"
 )
 
@@ -40,6 +41,12 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
+	if dir := r.Header.Get(workspaceDirHeader); dir != "" {
+		if abs, err := filepath.Abs(filepath.Clean(dir)); err == nil {
+			s.rememberWorkspace(abs)
+		}
+	}
+
 	agents := s.manager.ListAgents()
 	if len(agents) == 0 {
 		writeErr(w, http.StatusServiceUnavailable, "UNAVAILABLE", "no agent running")

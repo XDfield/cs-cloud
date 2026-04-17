@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"cs-cloud/internal/config"
@@ -24,6 +25,8 @@ type Server struct {
 	inputWsH   *terminal.InputWsHandler
 	runtimeCfg config.RuntimeConfig
 	cfg        *config.Config
+	rootDir    string
+	recentMu   sync.Mutex
 }
 
 func New(opts ...Option) *Server {
@@ -115,6 +118,10 @@ func WithRuntimeConfig(cfg config.RuntimeConfig) Option {
 
 func WithConfig(cfg *config.Config) Option {
 	return func(s *Server) { s.cfg = cfg }
+}
+
+func WithRootDir(dir string) Option {
+	return func(s *Server) { s.rootDir = dir }
 }
 
 func (s *Server) Manager() *runtime.AgentManager {

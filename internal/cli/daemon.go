@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +18,98 @@ import (
 	"cs-cloud/internal/tunnel"
 	"cs-cloud/internal/version"
 )
+
+
+func prewarmRequest(ctx context.Context, cli *http.Client, base string, path string, dir string) {
+	begin := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+	if err != nil {
+		logger.Warn("prewarm request build failed (%s): %v", path, err)
+		return
+	}
+	req.Header.Set("x-opencode-directory", dir)
+
+	resp, err := cli.Do(req)
+	if err != nil {
+		logger.Warn("prewarm request failed (%s) after %s: %v", path, time.Since(begin), err)
+		return
+	}
+	resp.Body.Close()
+
+	cost := time.Since(begin)
+	if resp.StatusCode >= http.StatusBadRequest {
+		logger.Warn("prewarm request returned %d (%s) in %s", resp.StatusCode, path, cost)
+		return
+	}
+	logger.Info("prewarm request ok (%s) in %s", path, cost)
+}
+
+func prewarmServer(ctx context.Context, base string, dir string) {
+	fast := []string{
+		"/agent",
+		"/command",
+		"/provider/capabilities",
+		"/vcs",
+	}
+	start := time.Now()
+	logger.Info("server prewarm started (workspace=%s)", dir)
+	prewarmRequest(ctx, &http.Client{Timeout: 30 * time.Second}, base, "/session", dir)
+
+	var wg sync.WaitGroup
+	for _, path := range fast {
+		path := path
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prewarmRequest(ctx, &http.Client{Timeout: 15 * time.Second}, base, path, dir)
+		}()
+	}
+	wg.Wait()
+	logger.Info("server prewarm finished in %s", time.Since(start))
+}
+
+func prewarmRecent(ctx context.Context, base string, dirs []string) {
+	const limit = 2
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		dir := dir
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			prewarmServer(ctx, base, dir)
+		}()
+	}
+	wg.Wait()
+}
+
+func collectRecent(dirs []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		abs, err := filepath.Abs(filepath.Clean(dir))
+		if err != nil {
+			continue
+		}
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+			continue
+		}
+		seen[abs] = struct{}{}
+		out = append(out, abs)
+	}
+	return out
+}
 
 func runDaemon(a *app.App) error {
 	mode := a.LoadMode()
@@ -29,7 +124,7 @@ func runDaemon(a *app.App) error {
 	})
 	defer logger.Sync()
 
-	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()))
+	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
 	ctx := context.Background()
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
@@ -58,6 +153,20 @@ func runDaemon(a *app.App) error {
 	}
 
 	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
+	recent, err := a.LoadRecentWorkspaces()
+	if err != nil {
+		logger.Warn("failed to load recent workspaces: %v", err)
+	}
+	dir, cwdErr := os.Getwd()
+	if cwdErr != nil {
+		logger.Warn("failed to resolve prewarm workspace: %v", cwdErr)
+	} else {
+		recent = append([]string{dir}, recent...)
+	}
+	recent = collectRecent(recent)
+	if len(recent) > 0 {
+		go prewarmRecent(context.Background(), srv.Manager().Endpoint(), recent)
+	}
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
