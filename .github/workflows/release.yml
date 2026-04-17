@@ -122,6 +122,13 @@ jobs:
           OWNER="xdfield"
           REPO="cs-cloud-release"
           TAG="${GITHUB_REF_NAME}"
+          TARGET_REF=$(curl -fsS \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}?access_token=${GITEE_ACCESS_TOKEN}" \
+            | jq -r '.default_branch // empty')
+
+          if [ -z "$TARGET_REF" ]; then
+            TARGET_REF=master
+          fi
 
           existing=$(curl -fsS \
             "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_ACCESS_TOKEN}" \
@@ -130,13 +137,14 @@ jobs:
           if [ -n "$existing" ] && [ "$(printf '%s' "$existing" | jq -r '.id // empty')" != "" ]; then
             release_id=$(printf '%s' "$existing" | jq -r '.id')
           else
-            created=$(curl -fsS -X POST \
+            created=$(curl -sS -X POST \
               "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
               --data-urlencode "access_token=${GITEE_ACCESS_TOKEN}" \
               --data-urlencode "tag_name=${TAG}" \
               --data-urlencode "name=${TAG}" \
               --data-urlencode "body=${BODY}" \
-              --data-urlencode "prerelease=false")
+              --data-urlencode "prerelease=false" \
+              --data-urlencode "target_commitish=${TARGET_REF}")
             release_id=$(printf '%s' "$created" | jq -r '.id')
             if [ -z "$release_id" ]; then
               printf '%s\n' "$created"
