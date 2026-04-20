@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os/exec"
+	"strings"
 )
 
 type OpenCodeDriver struct {
@@ -77,8 +80,8 @@ func (d *OpenCodeDriver) ProxyRoutes() []ProxyRoute {
 		{http.MethodGet, "/conversations/{id}", rewriteSessionID("/session/"), nil},
 		{http.MethodPatch, "/conversations/{id}", rewriteSessionID("/session/"), nil},
 		{http.MethodDelete, "/conversations/{id}", rewriteSessionID("/session/"), nil},
-		{http.MethodPost, "/conversations/{id}/prompt", rewriteSessionID("/session/"), nil},
-		{http.MethodPost, "/conversations/{id}/prompt/async", rewriteSessionIDWithSuffix("/session/", "/prompt_async"), nil},
+		{http.MethodPost, "/conversations/{id}/prompt", rewriteSessionIDWithSuffix("/session/", "/prompt_async"), transformPromptBody},
+		{http.MethodPost, "/conversations/{id}/prompt/async", rewriteSessionIDWithSuffix("/session/", "/prompt_async"), transformPromptBody},
 		{http.MethodPost, "/conversations/{id}/abort", rewriteSessionIDWithSuffix("/session/", "/abort"), nil},
 		{http.MethodGet, "/conversations/{id}/messages", rewriteSessionIDWithSuffix("/session/", "/message"), nil},
 		{http.MethodGet, "/conversations/{id}/todo", rewriteSessionIDWithSuffix("/session/", "/todo"), nil},
@@ -123,6 +126,59 @@ func rewriteQuestionAction(suffix string) func(map[string]string) string {
 	return func(vals map[string]string) string {
 		return "/question/" + vals["id"] + suffix
 	}
+}
+
+func transformPromptBody(body io.ReadCloser) io.ReadCloser {
+	pr, pw := io.Pipe()
+	go func() {
+		defer body.Close()
+		defer pw.Close()
+
+		buf, err := io.ReadAll(body)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		trimmed := bytes.TrimSpace(buf)
+		if len(trimmed) == 0 {
+			_, _ = pw.Write(buf)
+			return
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(trimmed, &payload); err != nil {
+			_, _ = pw.Write(buf)
+			return
+		}
+		if _, ok := payload["parts"]; ok {
+			_, _ = pw.Write(buf)
+			return
+		}
+
+		content, _ := payload["content"].(string)
+		parts := []map[string]any{}
+		if strings.TrimSpace(content) != "" {
+			parts = append(parts, map[string]any{
+				"type": "text",
+				"text": content,
+			})
+		}
+
+		transformed := map[string]any{
+			"parts": parts,
+		}
+		if files, ok := payload["files"]; ok {
+			transformed["files"] = files
+		}
+
+		encoded, err := json.Marshal(transformed)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		_, _ = pw.Write(encoded)
+	}()
+	return pr
 }
 
 func renameJSONField(from, to string) func(io.ReadCloser) io.ReadCloser {
