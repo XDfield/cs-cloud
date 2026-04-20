@@ -62,6 +62,8 @@ func start(a *app.App) error {
 
 	_ = a.SaveMode(mode)
 
+	printInfo("Starting daemon...")
+
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
@@ -99,14 +101,33 @@ func start(a *app.App) error {
 		return err
 	}
 
+	daemonExited := make(chan error, 1)
+	go func() { daemonExited <- cmd.Wait() }()
+
 	ready := false
 	deadline := time.Now().Add(readyTimeout)
+	lastDot := time.Now()
+	dotCount := 0
 	for time.Now().Before(deadline) {
 		if url, _ := a.ServerURL(); url != "" {
-		ready = true
-		break
+			ready = true
+			break
+		}
+		select {
+		case <-daemonExited:
+			goto waitDone
+		default:
+		}
+		if time.Since(lastDot) >= 3*time.Second {
+			fmt.Print(".")
+			dotCount++
+			lastDot = time.Now()
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
-	time.Sleep(200 * time.Millisecond)
+waitDone:
+	if dotCount > 0 {
+		fmt.Println()
 	}
 
 	if !ready {
@@ -127,7 +148,7 @@ func start(a *app.App) error {
 func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, error) {
 	info, err := device.Register(ctx, a.Config())
 	if err != nil {
-		if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) {
+		if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) || device.IsAuthError(err) {
 			printInfo("Cloud registration requires CoStrict login, starting login flow...")
 			if _, loginErr := provider.LoginCoStrict(ctx); loginErr != nil {
 				return nil, loginErr
@@ -137,7 +158,7 @@ func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, err
 		}
 		if device.IsInvalidDeviceTokenError(err) {
 			_ = device.ClearDevice()
-			if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) {
+			if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) || device.IsAuthError(err) {
 				_, _ = provider.LoginCoStrict(ctx)
 			}
 			info, err = device.Register(ctx, a.Config())

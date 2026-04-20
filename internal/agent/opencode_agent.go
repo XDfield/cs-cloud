@@ -104,12 +104,15 @@ func (a *OpenCodeAgent) Start(ctx context.Context) error {
 	agentCtx, agentCancel := context.WithCancel(ctx)
 	a.cancel = agentCancel
 
+	logger.Info("[debug] spawning '%s serve' and waiting for port...", a.cliPath)
+	begin := time.Now()
 	endpoint, err := a.spawnAndWaitForPort(agentCtx)
+	logger.Info("[debug] spawnAndWaitForPort took %s, err=%v", time.Since(begin), err)
 	if err != nil {
 		a.setState(StateError)
 		a.cancel = nil
 		agentCancel()
-		return fmt.Errorf("spawn opencode: %w", err)
+		return fmt.Errorf("failed to start agent '%s serve': %w", a.cliPath, err)
 	}
 	a.endpoint = endpoint
 	logger.Info("opencode endpoint resolved: %s", a.endpoint)
@@ -246,6 +249,9 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 		return "", fmt.Errorf("stdout pipe: %w", err)
 	}
 
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start %s serve: %w", cliName, err)
 	}
@@ -270,7 +276,12 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 				}
 			}
 		}
-		errCh <- fmt.Errorf("opencode process exited before printing port")
+		stderr := strings.TrimSpace(stderrBuf.String())
+		if stderr != "" {
+			errCh <- fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
+		} else {
+			errCh <- fmt.Errorf("%s exited unexpectedly (no output)", cliName)
+		}
 	}()
 
 	timeout := time.After(30 * time.Second)
@@ -280,10 +291,14 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 	case err := <-errCh:
 		return "", err
 	case <-a.waitCh:
-		return "", fmt.Errorf("opencode process exited unexpectedly")
+		stderr := strings.TrimSpace(stderrBuf.String())
+		if stderr != "" {
+			return "", fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
+		}
+		return "", fmt.Errorf("%s exited unexpectedly (no output)", cliName)
 	case <-timeout:
 		_ = cmd.Process.Kill()
-		return "", fmt.Errorf("timeout waiting for opencode to start")
+		return "", fmt.Errorf("timeout waiting for %s to start", cliName)
 	case <-ctx.Done():
 		_ = cmd.Process.Kill()
 		return "", ctx.Err()

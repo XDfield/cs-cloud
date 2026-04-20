@@ -199,9 +199,14 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, age
 	d := agent.NewOpenCodeDriver(cliPath)
 	m.RegisterDriver(d)
 
+	resolved := cliPath
+	if resolved == "" {
+		resolved = agent.OpenCodeCLIBinary
+	}
+
 	detected, _ := d.Detect(ctx)
 	if len(detected) == 0 || !detected[0].Available {
-		return fmt.Errorf("no available agent detected")
+		return fmt.Errorf("agent CLI '%s' not found in PATH, please ensure it is installed correctly", resolved)
 	}
 
 	var extra map[string]any

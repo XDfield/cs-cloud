@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"cs-cloud/internal/agent"
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/localserver"
@@ -114,9 +115,6 @@ func collectRecent(dirs []string) []string {
 func runDaemon(a *app.App) error {
 	configureDaemonSignals()
 
-	mode := a.LoadMode()
-	a.SaveArgs(os.Args[1:])
-
 	logger.Init(logger.Config{
 		Dir:        a.RootDir(),
 		MaxSizeMB:  100,
@@ -126,14 +124,28 @@ func runDaemon(a *app.App) error {
 	})
 	defer logger.Sync()
 
+	logger.Info("[debug] daemon process started (pid=%d)", os.Getpid())
+
+	mode := a.LoadMode()
+	a.SaveArgs(os.Args[1:])
+
+	logger.Info("[debug] initializing local server...")
 	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
 	ctx := context.Background()
+	cliPath := a.Config().AgentCLIPath
+	if cliPath == "" {
+		cliPath = agent.OpenCodeCLIBinary
+	}
+	logger.Info("[debug] detecting agent CLI '%s'...", cliPath)
 	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
+		logger.Error("please check that '%s serve' works correctly in your terminal", cliPath)
 		return err
 	}
 	logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
+
+	logger.Info("[debug] agent init done, starting HTTP server...")
 
 	if pid := srv.Manager().AgentPID(); pid > 0 {
 		if err := a.WriteAgentPID(pid); err != nil {
@@ -145,6 +157,7 @@ func runDaemon(a *app.App) error {
 		logger.Error("failed to start server: %v", err)
 		return err
 	}
+	logger.Info("[debug] HTTP server started, saving state...")
 	if err := a.SaveServerURL(srv.URL()); err != nil {
 		logger.Error("failed to save server url: %v", err)
 		return err
