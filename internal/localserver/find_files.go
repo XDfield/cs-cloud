@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+// @Summary      Search files by name
+// @Description  Fuzzy file search by name. Automatically skips common directories (node_modules, .git, dist, build, etc.).
+// @Tags         Runtime
+// @Produce      json
+// @Param        query      query  string  false  "Search keyword (case-insensitive)"
+// @Param        directory  query  string  false  "Target directory (relative to workspace root)"  default(.)
+// @Param        dirs       query  string  false  "Include directories in results"  Enums(true, false)  default(true)
+// @Param        limit      query  int     false  "Max results"  minimum(1)  maximum(200)  default(10)
+// @Success      200  {object}  envelope{data=[]string}
+// @Failure      400  {object}  envelope
+// @Router       /runtime/find/file [get]
 func (s *Server) handleFindFiles(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("query")
 	dirs := r.URL.Query().Get("dirs")

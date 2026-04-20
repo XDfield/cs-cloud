@@ -10,15 +10,15 @@ import (
 )
 
 type diffFileEntry struct {
-	Path      string `json:"path"`
-	Status    string `json:"status"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
+	Path      string `json:"path" example:"src/main.go"`
+	Status    string `json:"status" example:"modified"`
+	Additions int    `json:"additions" example:"10"`
+	Deletions int    `json:"deletions" example:"3"`
 }
 
 type diffData struct {
-	Directory     string          `json:"directory"`
-	Branch        string          `json:"branch"`
+	Directory     string          `json:"directory" example:"/home/user/project"`
+	Branch        string          `json:"branch" example:"main"`
 	StagedFiles   []diffFileEntry `json:"stagedFiles"`
 	UnstagedFiles []diffFileEntry `json:"unstagedFiles"`
 }
@@ -29,6 +29,15 @@ type diffContentData struct {
 	After  string `json:"after,omitempty"`
 }
 
+// @Summary      Get Git diff statistics
+// @Description  Returns staged and unstaged file change statistics. Does not include diff content — use /runtime/diff/content for that.
+// @Tags         Runtime
+// @Produce      json
+// @Param        directory  query  string  false  "Target directory (relative to workspace root)"  default(.)
+// @Param        path       query  string  false  "Filter by file path"
+// @Success      200  {object}  envelope{data=diffData}
+// @Failure      400  {object}  envelope
+// @Router       /runtime/diff [get]
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	directory := r.URL.Query().Get("directory")
 	if directory == "" {
@@ -168,6 +177,15 @@ func runGitDiff(dir string, staged bool, filterPath string) string {
 	return string(out)
 }
 
+// @Summary      Get Git diff content
+// @Description  Returns the raw git diff output with optional before/after file content. Directory is determined by X-Workspace-Directory header.
+// @Tags         Runtime
+// @Produce      json
+// @Param        staged  query  string  false  "Show staged diff"  Enums(true, false)  default(false)
+// @Param        path    query  string  false  "Filter by file path"
+// @Success      200  {object}  envelope{data=diffContentData}
+// @Failure      400  {object}  envelope
+// @Router       /runtime/diff/content [get]
 func (s *Server) handleDiffContent(w http.ResponseWriter, r *http.Request) {
 	absDir, _, err := s.resolvePath(r, ".")
 	if err != nil {

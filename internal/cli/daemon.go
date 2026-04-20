@@ -134,11 +134,20 @@ func runDaemon(a *app.App) error {
 
 	ctx := context.Background()
 	cliPath := a.Config().AgentCLIPath
-	if cliPath == "" {
-		cliPath = agent.OpenCodeCLIBinary
+	agentType := a.Config().DefaultAgent
+	if agentType == "" {
+		agentType = "opencode"
 	}
-	logger.Info("[debug] detecting agent CLI '%s'...", cliPath)
-	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
+	if cliPath == "" {
+		switch agentType {
+		case "opencode":
+			cliPath = agent.OpenCodeCLIBinary
+		case "csc":
+			cliPath = agent.CSCCLIBinary
+		}
+	}
+	logger.Info("[debug] detecting agent CLI '%s' (type=%s)...", cliPath, agentType)
+	if err := srv.Manager().InitDefaultAgent(ctx, agentType, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
 		logger.Error("please check that '%s serve' works correctly in your terminal", cliPath)
 		return err
@@ -168,6 +177,7 @@ func runDaemon(a *app.App) error {
 	}
 
 	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
+	logger.Info("swagger docs: %s/api/v1/docs", srv.URL())
 	recent, err := a.LoadRecentWorkspaces()
 	if err != nil {
 		logger.Warn("failed to load recent workspaces: %v", err)

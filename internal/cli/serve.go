@@ -19,7 +19,7 @@ func serve(a *app.App) error {
 
 	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
-	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
+	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().DefaultAgent, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
 		return fmt.Errorf("failed to init agent: %w", err)
 	}
 	printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
@@ -34,6 +34,7 @@ func serve(a *app.App) error {
 	printTitle("cs-cloud serve")
 	printSuccess("Server running")
 	printKV("url", srv.URL())
+	printKV("docs", srv.URL()+"/api/v1/docs")
 
 	agents, _ := srv.Manager().DetectAgents(ctx)
 	for _, ag := range agents {
