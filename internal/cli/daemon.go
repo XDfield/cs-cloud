@@ -112,6 +112,8 @@ func collectRecent(dirs []string) []string {
 }
 
 func runDaemon(a *app.App) error {
+	configureDaemonSignals()
+
 	mode := a.LoadMode()
 	a.SaveArgs(os.Args[1:])
 

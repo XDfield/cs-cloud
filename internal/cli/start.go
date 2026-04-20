@@ -71,6 +71,13 @@ func start(a *app.App) error {
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
+	defer logFd.Close()
+
+	nullFd, err := openNullDevice()
+	if err != nil {
+		return fmt.Errorf("open null device: %w", err)
+	}
+	defer nullFd.Close()
 
 	daemonArgs := []string{"_daemon"}
 	if p := platform.AuthPath(); p != "" {
@@ -81,15 +88,14 @@ func start(a *app.App) error {
 	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)
+	cmd.Stdin = nullFd
 	cmd.Stdout = logFd
 	cmd.Stderr = logFd
 	if err := cmd.Start(); err != nil {
-		logFd.Close()
 		return fmt.Errorf("start daemon: %w", err)
 	}
 
 	if err := a.WritePID(cmd.Process.Pid); err != nil {
-		logFd.Close()
 		return err
 	}
 
@@ -97,12 +103,11 @@ func start(a *app.App) error {
 	deadline := time.Now().Add(readyTimeout)
 	for time.Now().Before(deadline) {
 		if url, _ := a.ServerURL(); url != "" {
-			ready = true
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
+		ready = true
+		break
 	}
-	logFd.Close()
+	time.Sleep(200 * time.Millisecond)
+	}
 
 	if !ready {
 		printError("Daemon failed to start")
