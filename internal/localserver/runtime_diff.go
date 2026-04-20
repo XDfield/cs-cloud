@@ -3,6 +3,7 @@ package localserver
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -16,10 +17,16 @@ type diffFileEntry struct {
 }
 
 type diffData struct {
-	Directory string         `json:"directory"`
-	Branch    string         `json:"branch"`
-	Files     []diffFileEntry `json:"files"`
-	Diff      string         `json:"diff,omitempty"`
+	Directory     string          `json:"directory"`
+	Branch        string          `json:"branch"`
+	StagedFiles   []diffFileEntry `json:"stagedFiles"`
+	UnstagedFiles []diffFileEntry `json:"unstagedFiles"`
+}
+
+type diffContentData struct {
+	Diff   string `json:"diff"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
@@ -34,20 +41,18 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	staged := r.URL.Query().Get("staged") == "true"
-	statOnly := r.URL.Query().Get("stat") == "true"
 	filterPath := r.URL.Query().Get("path")
 
 	var (
-		branch string
-		files  []diffFileEntry
-		diff   string
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		notGit bool
+		branch        string
+		stagedFiles   []diffFileEntry
+		unstagedFiles []diffFileEntry
+		mu            sync.Mutex
+		wg            sync.WaitGroup
+		notGit        bool
 	)
 
-	wg.Add(2)
+	wg.Add(3)
 
 	go func() {
 		defer wg.Done()
@@ -63,14 +68,26 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer wg.Done()
-		entries, err := parseDiffStatErr(absDir, staged, filterPath)
+		entries, err := parseDiffStatErr(absDir, true, filterPath)
 		if err != nil {
 			mu.Lock()
 			notGit = true
 			mu.Unlock()
 			return
 		}
-		files = entries
+		stagedFiles = entries
+	}()
+
+	go func() {
+		defer wg.Done()
+		entries, err := parseDiffStatErr(absDir, false, filterPath)
+		if err != nil {
+			mu.Lock()
+			notGit = true
+			mu.Unlock()
+			return
+		}
+		unstagedFiles = entries
 	}()
 
 	wg.Wait()
@@ -80,15 +97,11 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !statOnly {
-		diff = runGitDiff(absDir, staged, filterPath)
-	}
-
 	writeOK(w, diffData{
-		Directory: absDir,
-		Branch:    branch,
-		Files:     files,
-		Diff:      diff,
+		Directory:     absDir,
+		Branch:        branch,
+		StagedFiles:   stagedFiles,
+		UnstagedFiles: unstagedFiles,
 	})
 }
 
@@ -148,6 +161,50 @@ func runGitDiff(dir string, staged bool, filterPath string) string {
 		args = append(args, "--", filterPath)
 	}
 
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+func (s *Server) handleDiffContent(w http.ResponseWriter, r *http.Request) {
+	absDir, _, err := s.resolvePath(r, ".")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	staged := r.URL.Query().Get("staged") == "true"
+	filterPath := r.URL.Query().Get("path")
+
+	beforeRef := "HEAD"
+	if !staged {
+		beforeRef = ""
+	}
+
+	writeOK(w, diffContentData{
+		Diff:   runGitDiff(absDir, staged, filterPath),
+		Before: gitShowFile(absDir, beforeRef, filterPath),
+		After:  gitShowFile(absDir, "", filterPath),
+	})
+}
+
+func gitShowFile(dir string, ref string, path string) string {
+	if path == "" {
+		return ""
+	}
+	var args []string
+	if ref != "" {
+		args = []string{"-C", dir, "show", ref + ":" + path}
+	} else {
+		absPath := dir + "/" + path
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
 		return ""
