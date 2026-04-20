@@ -196,26 +196,26 @@ func (s *Server) handleDiffContent(w http.ResponseWriter, r *http.Request) {
 	staged := r.URL.Query().Get("staged") == "true"
 	filterPath := r.URL.Query().Get("path")
 
-	beforeRef := "HEAD"
-	if !staged {
-		beforeRef = ""
+	beforeSource := "index"
+	afterSource := "worktree"
+	if staged {
+		beforeSource = "HEAD"
+		afterSource = "index"
 	}
 
 	writeOK(w, diffContentData{
 		Diff:   runGitDiff(absDir, staged, filterPath),
-		Before: gitShowFile(absDir, beforeRef, filterPath),
-		After:  gitShowFile(absDir, "", filterPath),
+		Before: gitShowFile(absDir, beforeSource, filterPath),
+		After:  gitShowFile(absDir, afterSource, filterPath),
 	})
 }
 
-func gitShowFile(dir string, ref string, path string) string {
+func gitShowFile(dir string, source string, path string) string {
 	if path == "" {
 		return ""
 	}
-	var args []string
-	if ref != "" {
-		args = []string{"-C", dir, "show", ref + ":" + path}
-	} else {
+
+	if source == "worktree" {
 		absPath := dir + "/" + path
 		data, err := os.ReadFile(absPath)
 		if err != nil {
@@ -223,6 +223,17 @@ func gitShowFile(dir string, ref string, path string) string {
 		}
 		return string(data)
 	}
+
+	var args []string
+	switch source {
+	case "HEAD":
+		args = []string{"-C", dir, "show", "HEAD:" + path}
+	case "index":
+		args = []string{"-C", dir, "show", ":" + path}
+	default:
+		return ""
+	}
+
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
 		return ""

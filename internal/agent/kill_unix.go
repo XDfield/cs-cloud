@@ -8,11 +8,11 @@ import (
 	"syscall"
 )
 
-func setCmdProcessGroup(cmd *exec.Cmd) {
+func SetCmdProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func signalTerminate(pid int) {
+func SignalTerminate(pid int) {
 	_ = syscall.Kill(-pid, syscall.SIGTERM)
 	p, err := os.FindProcess(pid)
 	if err != nil {
@@ -21,7 +21,7 @@ func signalTerminate(pid int) {
 	_ = p.Signal(syscall.SIGTERM)
 }
 
-func killProcessTree(pid int) {
+func KillProcessTree(pid int) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	p, err := os.FindProcess(pid)
 	if err != nil {

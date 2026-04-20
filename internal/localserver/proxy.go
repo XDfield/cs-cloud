@@ -35,11 +35,11 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	var rewriteFunc func(map[string]string) string
 	var transformFunc func(io.ReadCloser) io.ReadCloser
+	cleanPath := strings.TrimPrefix(r.URL.Path, "/api/v1")
 	for _, rt := range d.ProxyRoutes() {
 		if r.Method != rt.Method {
 			continue
 		}
-		cleanPath := strings.TrimPrefix(r.URL.Path, "/api/v1")
 		if matchRoute(cleanPath, rt.Prefix) {
 			rewriteFunc = rt.Rewrite
 			transformFunc = rt.Transform

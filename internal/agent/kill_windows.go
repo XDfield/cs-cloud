@@ -8,10 +8,10 @@ import (
 	"os/exec"
 )
 
-func setCmdProcessGroup(cmd *exec.Cmd) {
+func SetCmdProcessGroup(cmd *exec.Cmd) {
 }
 
-func signalTerminate(pid int) {
+func SignalTerminate(pid int) {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return
@@ -19,7 +19,7 @@ func signalTerminate(pid int) {
 	_ = proc.Signal(os.Interrupt)
 }
 
-func killProcessTree(pid int) {
+func KillProcessTree(pid int) {
 	cmd := exec.Command("taskkill", "/pid", fmt.Sprintf("%d", pid), "/f", "/t")
 	cmd.Stdin = nil
 	cmd.Stdout = nil

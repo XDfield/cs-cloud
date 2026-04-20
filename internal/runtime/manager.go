@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"cs-cloud/internal/agent"
+	agentcs "cs-cloud/internal/agent/cs"
+	agentcsc "cs-cloud/internal/agent/csc"
 )
 
 type AgentManager struct {
@@ -195,13 +197,34 @@ func (m *AgentManager) DefaultBackend() string {
 	return ""
 }
 
-func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, agentEnv map[string]string) error {
-	d := agent.NewOpenCodeDriver(cliPath)
-	m.RegisterDriver(d)
+func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, cliPath string, agentEnv map[string]string) error {
+	drivers := map[string]agent.Driver{
+		"cs":  agentcs.NewDriver(cliPath),
+		"csc": agentcsc.NewDriver(cliPath),
+	}
+
+	for name, d := range drivers {
+		m.RegisterDriver(d)
+		_ = name
+	}
+
+	if agentType == "" {
+		agentType = "cs"
+	}
+
+	d, ok := drivers[agentType]
+	if !ok {
+		return fmt.Errorf("unknown agent type: %s (available: cs, csc)", agentType)
+	}
 
 	resolved := cliPath
 	if resolved == "" {
-		resolved = agent.OpenCodeCLIBinary
+		switch agentType {
+		case "cs":
+			resolved = agentcs.CLIBinary
+		case "csc":
+			resolved = agentcsc.CLIBinary
+		}
 	}
 
 	detected, _ := d.Detect(ctx)
@@ -215,7 +238,7 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, age
 	}
 	cfg := agent.AgentConfig{
 		ID:         "default",
-		Backend:    "opencode",
+		Backend:    agentType,
 		DriverName: "http",
 		WorkingDir: "",
 		CustomEnv:  agentEnv,

@@ -11,7 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"cs-cloud/internal/agent"
+	agentcs "cs-cloud/internal/agent/cs"
+	agentcsc "cs-cloud/internal/agent/csc"
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/localserver"
@@ -136,14 +137,14 @@ func runDaemon(a *app.App) error {
 	cliPath := a.Config().AgentCLIPath
 	agentType := a.Config().DefaultAgent
 	if agentType == "" {
-		agentType = "opencode"
+		agentType = "cs"
 	}
 	if cliPath == "" {
 		switch agentType {
-		case "opencode":
-			cliPath = agent.OpenCodeCLIBinary
+		case "cs":
+			cliPath = agentcs.CLIBinary
 		case "csc":
-			cliPath = agent.CSCCLIBinary
+			cliPath = agentcsc.CLIBinary
 		}
 	}
 	logger.Info("[debug] detecting agent CLI '%s' (type=%s)...", cliPath, agentType)
