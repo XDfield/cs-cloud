@@ -46,6 +46,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install swag
+        run: go install github.com/swaggo/swag/cmd/swag@latest
+      - name: Generate swagger docs
+        run: swag init -g cmd/cs-cloud/main.go -o internal/localserver/apidocs --parseDependency --parseInternal
       - uses: goreleaser/goreleaser-action@v6
         with:
           args: build --snapshot --clean
