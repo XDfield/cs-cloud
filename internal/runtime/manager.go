@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"cs-cloud/internal/agent"
@@ -197,10 +198,29 @@ func (m *AgentManager) DefaultBackend() string {
 	return ""
 }
 
-func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, cliPath string, agentEnv map[string]string) error {
+func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, agentCommand string, agentWorkspace string, agentEnv map[string]string) error {
+	if agentType == "" {
+		agentType = "cs"
+	}
+
+	var defaultCmd string
+	switch agentType {
+	case "cs":
+		defaultCmd = agentcs.CLIBinary + " serve"
+	case "csc":
+		defaultCmd = agentcsc.CLIBinary + " serve"
+	default:
+		return fmt.Errorf("unknown agent type: %s (available: cs, csc)", agentType)
+	}
+
+	cmd := agent.ParseCommand(defaultCmd)
+	if agentCommand != "" {
+		cmd = agent.ParseCommand(agentCommand)
+	}
+
 	drivers := map[string]agent.Driver{
-		"cs":  agentcs.NewDriver(cliPath),
-		"csc": agentcsc.NewDriver(cliPath),
+		"cs":  agentcs.NewDriver(cmd),
+		"csc": agentcsc.NewDriver(cmd),
 	}
 
 	for name, d := range drivers {
@@ -208,28 +228,14 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, c
 		_ = name
 	}
 
-	if agentType == "" {
-		agentType = "cs"
-	}
-
 	d, ok := drivers[agentType]
 	if !ok {
 		return fmt.Errorf("unknown agent type: %s (available: cs, csc)", agentType)
 	}
 
-	resolved := cliPath
-	if resolved == "" {
-		switch agentType {
-		case "cs":
-			resolved = agentcs.CLIBinary
-		case "csc":
-			resolved = agentcsc.CLIBinary
-		}
-	}
-
 	detected, _ := d.Detect(ctx)
 	if len(detected) == 0 || !detected[0].Available {
-		return fmt.Errorf("agent CLI '%s' not found in PATH, please ensure it is installed correctly", resolved)
+		return fmt.Errorf("agent command '%s' not found, please ensure it is installed correctly", strings.Join(cmd.Args, " "))
 	}
 
 	var extra map[string]any
@@ -240,7 +246,7 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, c
 		ID:         "default",
 		Backend:    agentType,
 		DriverName: "http",
-		WorkingDir: "",
+		WorkingDir: agentWorkspace,
 		CustomEnv:  agentEnv,
 		Extra:      extra,
 	}

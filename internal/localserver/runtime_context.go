@@ -80,7 +80,7 @@ func (s *Server) handleInstanceDispose(w http.ResponseWriter, r *http.Request) {
 	s.manager.KillAll()
 
 	ctx := r.Context()
-	if err := s.manager.InitDefaultAgent(ctx, s.cfg.DefaultAgent, "", nil); err != nil {
+	if err := s.manager.InitDefaultAgent(ctx, s.cfg.DefaultAgent, "", s.cfg.AgentWorkspace, nil); err != nil {
 		logger.Error("failed to restart agent: %v", err)
 	}
 

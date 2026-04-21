@@ -25,7 +25,7 @@ type Agent struct {
 	id    string
 	state agent.AgentState
 
-	cliPath   string
+	command   agent.Command
 	workDir   string
 	customEnv map[string]string
 	endpoint  string
@@ -41,15 +41,15 @@ type Agent struct {
 }
 
 func NewAgent(cfg agent.AgentConfig) *Agent {
-	cliPath := CLIBinary
+	cmd := agent.ParseCommand(CLIBinary + " serve")
 	if extra := cfg.Extra; extra != nil {
-		if p, ok := extra["cli_path"].(string); ok && p != "" {
-			cliPath = p
+		if c, ok := extra["command"].(agent.Command); ok && !c.IsZero() {
+			cmd = c
 		}
 	}
 	return &Agent{
 		id:         cfg.ID,
-		cliPath:    cliPath,
+		command:    cmd,
 		workDir:    cfg.WorkingDir,
 		customEnv:  cfg.CustomEnv,
 		state:      agent.StateIdle,
@@ -92,13 +92,17 @@ func (a *Agent) emit(event agent.Event) {
 	}
 }
 
+func (a *Agent) commandDisplay() string {
+	return strings.Join(a.command.Args, " ")
+}
+
 func (a *Agent) Start(ctx context.Context) error {
 	a.setState(agent.StateConnecting)
 
 	agentCtx, agentCancel := context.WithCancel(ctx)
 	a.cancel = agentCancel
 
-	logger.Info("[debug] spawning '%s serve' and waiting for port...", a.cliPath)
+	logger.Info("[debug] spawning '%s' and waiting for port...", a.commandDisplay())
 	begin := time.Now()
 	endpoint, err := a.spawnAndWaitForPort(agentCtx)
 	logger.Info("[debug] spawnAndWaitForPort took %s, err=%v", time.Since(begin), err)
@@ -106,7 +110,7 @@ func (a *Agent) Start(ctx context.Context) error {
 		a.setState(agent.StateError)
 		a.cancel = nil
 		agentCancel()
-		return fmt.Errorf("failed to start agent '%s serve': %w", a.cliPath, err)
+		return fmt.Errorf("failed to start agent '%s': %w", a.commandDisplay(), err)
 	}
 	a.endpoint = endpoint
 	logger.Info("cs endpoint resolved: %s", a.endpoint)
@@ -225,43 +229,46 @@ func (a *Agent) SetModel(ctx context.Context, modelID string) (*agent.ModelInfo,
 }
 
 func (a *Agent) spawnAndWaitForPort(ctx context.Context) (string, error) {
-	cliName := a.cliPath
+	args := a.command.Args
+	displayName := a.commandDisplay()
 
-	cmd := exec.CommandContext(ctx, cliName, "serve")
+	execCmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	if a.workDir != "" {
-		cmd.Dir = a.workDir
+		execCmd.Dir = a.workDir
 	}
 	env := append(os.Environ(), "OPENCODE_DISABLE_EMBEDDED_WEB_UI=1")
 	for k, v := range a.customEnv {
 		env = append(env, k+"="+v)
 	}
-	cmd.Env = env
-	agent.SetCmdProcessGroup(cmd)
+	execCmd.Env = env
+	agent.SetCmdProcessGroup(execCmd)
 
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := execCmd.StdoutPipe()
 	if err != nil {
 		return "", fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start %s serve: %w", cliName, err)
+	stderrPipe, err := execCmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("stderr pipe: %w", err)
 	}
 
-	a.cmd = cmd
+	if err := execCmd.Start(); err != nil {
+		return "", fmt.Errorf("start %s: %w", displayName, err)
+	}
+
+	a.cmd = execCmd
 	a.waitCh = make(chan error, 1)
-	go func() { a.waitCh <- cmd.Wait() }()
+	go func() { a.waitCh <- execCmd.Wait() }()
 
 	endpointCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
-	go func() {
-		scanner := bufio.NewScanner(stdout)
+	scanOutput := func(r io.Reader, tag string) {
+		scanner := bufio.NewScanner(r)
 		for scanner.Scan() {
 			line := scanner.Text()
-			logger.Debug("cs stdout: %s", line)
+			logger.Info("[%s] %s: %s", tag, displayName, line)
 			for _, pat := range agent.PortPatterns {
 				matches := pat.FindStringSubmatch(line)
 				if len(matches) >= 2 {
@@ -270,13 +277,10 @@ func (a *Agent) spawnAndWaitForPort(ctx context.Context) (string, error) {
 				}
 			}
 		}
-		stderr := strings.TrimSpace(stderrBuf.String())
-		if stderr != "" {
-			errCh <- fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
-		} else {
-			errCh <- fmt.Errorf("%s exited unexpectedly (no output)", cliName)
-		}
-	}()
+	}
+
+	go scanOutput(stdout, "stdout")
+	go scanOutput(stderrPipe, "stderr")
 
 	timeout := time.After(30 * time.Second)
 	select {
@@ -285,16 +289,12 @@ func (a *Agent) spawnAndWaitForPort(ctx context.Context) (string, error) {
 	case err := <-errCh:
 		return "", err
 	case <-a.waitCh:
-		stderr := strings.TrimSpace(stderrBuf.String())
-		if stderr != "" {
-			return "", fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
-		}
-		return "", fmt.Errorf("%s exited unexpectedly (no output)", cliName)
+		return "", fmt.Errorf("%s exited unexpectedly (no matching port output)", displayName)
 	case <-timeout:
-		_ = cmd.Process.Kill()
-		return "", fmt.Errorf("timeout waiting for %s to start", cliName)
+		_ = execCmd.Process.Kill()
+		return "", fmt.Errorf("timeout waiting for %s to start", displayName)
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		_ = execCmd.Process.Kill()
 		return "", ctx.Err()
 	}
 }

@@ -14,7 +14,7 @@ func Load() (*Config, error) {
 		BaseURL:      platform.Getenv("COSTRICT_BASE_URL"),
 		DefaultShell: platform.Getenv("CS_CLOUD_SHELL"),
 		DefaultAgent: platform.Getenv("CS_CLOUD_DEFAULT_AGENT"),
-		AgentCLIPath: platform.Getenv("CS_CLOUD_AGENT_CLI"),
+		AgentCommand: platform.Getenv("CS_CLOUD_AGENT_COMMAND"),
 	}
 
 	if cfg.CloudBaseURL == "" {
@@ -41,14 +41,17 @@ func Load() (*Config, error) {
 				if cfg.DefaultShell == "" {
 					cfg.DefaultShell = fileCfg.DefaultShell
 				}
-				if cfg.AgentCLIPath == "" {
-					cfg.AgentCLIPath = fileCfg.AgentCLIPath
+				if cfg.AgentCommand == "" {
+					cfg.AgentCommand = fileCfg.AgentCommand
 				}
 				if cfg.DefaultAgent == "" {
 					cfg.DefaultAgent = fileCfg.DefaultAgent
 				}
 				if cfg.AgentEnv == nil && fileCfg.AgentEnv != nil {
 					cfg.AgentEnv = fileCfg.AgentEnv
+				}
+				if cfg.AgentWorkspace == "" {
+					cfg.AgentWorkspace = fileCfg.AgentWorkspace
 				}
 			}
 		}

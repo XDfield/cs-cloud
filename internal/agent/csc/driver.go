@@ -10,23 +10,24 @@ import (
 )
 
 type Driver struct {
-	cliPath string
+	cmd agent.Command
 }
 
-func NewDriver(cliPath string) *Driver {
-	if cliPath == "" {
-		cliPath = CLIBinary
-	}
-	return &Driver{cliPath: cliPath}
+func NewDriver(cmd agent.Command) *Driver {
+	return &Driver{cmd: cmd}
 }
 
 func (d *Driver) Name() string { return "csc" }
 
 func (d *Driver) Detect(ctx context.Context) ([]agent.DetectedAgent, error) {
-	p, err := exec.LookPath(d.cliPath)
+	if d.cmd.IsZero() {
+		return nil, nil
+	}
+	p, err := exec.LookPath(d.cmd.Binary())
 	if err != nil {
 		return nil, nil
 	}
+	_ = p
 	return []agent.DetectedAgent{
 		{
 			Backend:   "csc",
@@ -34,17 +35,17 @@ func (d *Driver) Detect(ctx context.Context) ([]agent.DetectedAgent, error) {
 			Driver:    "http",
 			Available: true,
 			Extra: map[string]any{
-				"cli_path": p,
+				"command": d.cmd,
 			},
 		},
 	}, nil
 }
 
 func (d *Driver) CreateAgent(cfg agent.AgentConfig) (agent.Agent, error) {
-	cliPath := d.cliPath
+	cmd := d.cmd
 	if extra := cfg.Extra; extra != nil {
-		if p, ok := extra["cli_path"].(string); ok && p != "" {
-			cliPath = p
+		if c, ok := extra["command"].(agent.Command); ok && !c.IsZero() {
+			cmd = c
 		}
 	}
 	a := NewAgent(agent.AgentConfig{
@@ -54,7 +55,7 @@ func (d *Driver) CreateAgent(cfg agent.AgentConfig) (agent.Agent, error) {
 		WorkingDir: cfg.WorkingDir,
 		CustomEnv:  cfg.CustomEnv,
 		Extra: map[string]any{
-			"cli_path": cliPath,
+			"command": cmd,
 		},
 	})
 	return a, nil

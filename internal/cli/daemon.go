@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	agentcs "cs-cloud/internal/agent/cs"
-	agentcsc "cs-cloud/internal/agent/csc"
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/localserver"
@@ -134,23 +132,15 @@ func runDaemon(a *app.App) error {
 	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
 	ctx := context.Background()
-	cliPath := a.Config().AgentCLIPath
 	agentType := a.Config().DefaultAgent
+	agentCommand := a.Config().AgentCommand
 	if agentType == "" {
 		agentType = "cs"
 	}
-	if cliPath == "" {
-		switch agentType {
-		case "cs":
-			cliPath = agentcs.CLIBinary
-		case "csc":
-			cliPath = agentcsc.CLIBinary
-		}
-	}
-	logger.Info("[debug] detecting agent CLI '%s' (type=%s)...", cliPath, agentType)
-	if err := srv.Manager().InitDefaultAgent(ctx, agentType, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
+	logger.Info("[debug] detecting agent (type=%s, command=%q)...", agentType, agentCommand)
+	if err := srv.Manager().InitDefaultAgent(ctx, agentType, agentCommand, a.Config().AgentWorkspace, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
-		logger.Error("please check that '%s serve' works correctly in your terminal", cliPath)
+		logger.Error("please check your agent_command configuration works correctly in your terminal")
 		return err
 	}
 	logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
