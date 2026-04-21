@@ -1,12 +1,14 @@
 package config
 
 type Config struct {
-	CloudBaseURL string        `json:"cloud_base_url"`
-	BaseURL      string        `json:"base_url"`
-	DefaultShell string        `json:"default_shell"`
-	AgentCLIPath string        `json:"agent_cli_path"`
-	AgentEnv     map[string]string `json:"agent_env,omitempty"`
-	Runtime      RuntimeConfig `json:"runtime"`
+	CloudBaseURL  string            `json:"cloud_base_url"`
+	BaseURL       string            `json:"base_url"`
+	DefaultShell  string            `json:"default_shell"`
+	DefaultAgent  string            `json:"default_agent"`
+	AgentCommand  string            `json:"agent_command"`
+	AgentEnv      map[string]string `json:"agent_env,omitempty"`
+	AgentWorkspace string           `json:"agent_workspace,omitempty"`
+	Runtime       RuntimeConfig     `json:"runtime"`
 }
 
 type RuntimeConfig struct {

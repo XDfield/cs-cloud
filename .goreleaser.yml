@@ -5,6 +5,7 @@ project_name: cs-cloud
 before:
   hooks:
     - go mod tidy
+    - swag init -g cmd/cs-cloud/main.go -o internal/localserver/apidocs --parseDependency --parseInternal
 
 builds:
   - main: ./cmd/cs-cloud

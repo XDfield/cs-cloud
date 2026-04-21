@@ -17,6 +17,8 @@ type errVal struct {
 	Message string `json:"message"`
 }
 
+type responseEnvelope = envelope
+
 func readBody(r *http.Request) ([]byte, error) {
 	defer r.Body.Close()
 	data, err := io.ReadAll(r.Body)

@@ -3,25 +3,41 @@ package localserver
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
 )
 
 type diffFileEntry struct {
-	Path      string `json:"path"`
-	Status    string `json:"status"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
+	Path      string `json:"path" example:"src/main.go"`
+	Status    string `json:"status" example:"modified"`
+	Additions int    `json:"additions" example:"10"`
+	Deletions int    `json:"deletions" example:"3"`
 }
 
 type diffData struct {
-	Directory string         `json:"directory"`
-	Branch    string         `json:"branch"`
-	Files     []diffFileEntry `json:"files"`
-	Diff      string         `json:"diff,omitempty"`
+	Directory     string          `json:"directory" example:"/home/user/project"`
+	Branch        string          `json:"branch" example:"main"`
+	StagedFiles   []diffFileEntry `json:"stagedFiles"`
+	UnstagedFiles []diffFileEntry `json:"unstagedFiles"`
 }
 
+type diffContentData struct {
+	Diff   string `json:"diff"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
+}
+
+// @Summary      Get Git diff statistics
+// @Description  Returns staged and unstaged file change statistics. Does not include diff content — use /runtime/diff/content for that.
+// @Tags         Runtime
+// @Produce      json
+// @Param        directory  query  string  false  "Target directory (relative to workspace root)"  default(.)
+// @Param        path       query  string  false  "Filter by file path"
+// @Success      200  {object}  envelope{data=diffData}
+// @Failure      400  {object}  envelope
+// @Router       /runtime/diff [get]
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	directory := r.URL.Query().Get("directory")
 	if directory == "" {
@@ -34,20 +50,18 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	staged := r.URL.Query().Get("staged") == "true"
-	statOnly := r.URL.Query().Get("stat") == "true"
 	filterPath := r.URL.Query().Get("path")
 
 	var (
-		branch string
-		files  []diffFileEntry
-		diff   string
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		notGit bool
+		branch        string
+		stagedFiles   []diffFileEntry
+		unstagedFiles []diffFileEntry
+		mu            sync.Mutex
+		wg            sync.WaitGroup
+		notGit        bool
 	)
 
-	wg.Add(2)
+	wg.Add(3)
 
 	go func() {
 		defer wg.Done()
@@ -63,14 +77,26 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer wg.Done()
-		entries, err := parseDiffStatErr(absDir, staged, filterPath)
+		entries, err := parseDiffStatErr(absDir, true, filterPath)
 		if err != nil {
 			mu.Lock()
 			notGit = true
 			mu.Unlock()
 			return
 		}
-		files = entries
+		stagedFiles = entries
+	}()
+
+	go func() {
+		defer wg.Done()
+		entries, err := parseDiffStatErr(absDir, false, filterPath)
+		if err != nil {
+			mu.Lock()
+			notGit = true
+			mu.Unlock()
+			return
+		}
+		unstagedFiles = entries
 	}()
 
 	wg.Wait()
@@ -80,15 +106,11 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !statOnly {
-		diff = runGitDiff(absDir, staged, filterPath)
-	}
-
 	writeOK(w, diffData{
-		Directory: absDir,
-		Branch:    branch,
-		Files:     files,
-		Diff:      diff,
+		Directory:     absDir,
+		Branch:        branch,
+		StagedFiles:   stagedFiles,
+		UnstagedFiles: unstagedFiles,
 	})
 }
 
@@ -146,6 +168,70 @@ func runGitDiff(dir string, staged bool, filterPath string) string {
 	}
 	if filterPath != "" {
 		args = append(args, "--", filterPath)
+	}
+
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+// @Summary      Get Git diff content
+// @Description  Returns the raw git diff output with optional before/after file content. Directory is determined by X-Workspace-Directory header.
+// @Tags         Runtime
+// @Produce      json
+// @Param        staged  query  string  false  "Show staged diff"  Enums(true, false)  default(false)
+// @Param        path    query  string  false  "Filter by file path"
+// @Success      200  {object}  envelope{data=diffContentData}
+// @Failure      400  {object}  envelope
+// @Router       /runtime/diff/content [get]
+func (s *Server) handleDiffContent(w http.ResponseWriter, r *http.Request) {
+	absDir, _, err := s.resolvePath(r, ".")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	staged := r.URL.Query().Get("staged") == "true"
+	filterPath := r.URL.Query().Get("path")
+
+	beforeSource := "index"
+	afterSource := "worktree"
+	if staged {
+		beforeSource = "HEAD"
+		afterSource = "index"
+	}
+
+	writeOK(w, diffContentData{
+		Diff:   runGitDiff(absDir, staged, filterPath),
+		Before: gitShowFile(absDir, beforeSource, filterPath),
+		After:  gitShowFile(absDir, afterSource, filterPath),
+	})
+}
+
+func gitShowFile(dir string, source string, path string) string {
+	if path == "" {
+		return ""
+	}
+
+	if source == "worktree" {
+		absPath := dir + "/" + path
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
+
+	var args []string
+	switch source {
+	case "HEAD":
+		args = []string{"-C", dir, "show", "HEAD:" + path}
+	case "index":
+		args = []string{"-C", dir, "show", ":" + path}
+	default:
+		return ""
 	}
 
 	out, err := exec.Command("git", args...).Output()

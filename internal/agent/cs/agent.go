@@ -1,4 +1,4 @@
-package agent
+package cs
 
 import (
 	"bufio"
@@ -10,136 +10,134 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"cs-cloud/internal/agent"
 	"cs-cloud/internal/logger"
 )
 
-var portPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`listening on http://[\d.:]+:(\d+)`),
-	regexp.MustCompile(`internal server on port (\d+)`),
-	regexp.MustCompile(`server listening on .+:(\d+)`),
-}
+const CLIBinary = "cs"
 
-const OpenCodeCLIBinary = "cs"
-
-type OpenCodeAgent struct {
+type Agent struct {
 	mu    sync.Mutex
 	id    string
-	state AgentState
+	state agent.AgentState
 
-	cliPath  string
-	workDir  string
+	command   agent.Command
+	workDir   string
 	customEnv map[string]string
-	endpoint string
-	cmd     *exec.Cmd
-	waitCh  chan error
-	cancel  context.CancelFunc
+	endpoint  string
+	cmd       *exec.Cmd
+	waitCh    chan error
+	cancel    context.CancelFunc
 
 	sessionID    string
-	modelInfo    *ModelInfo
-	eventEmitter func(Event)
+	modelInfo    *agent.ModelInfo
+	eventEmitter func(agent.Event)
 
 	httpClient *http.Client
 }
 
-func NewOpenCodeAgent(cfg AgentConfig) *OpenCodeAgent {
-	cliPath := OpenCodeCLIBinary
+func NewAgent(cfg agent.AgentConfig) *Agent {
+	cmd := agent.ParseCommand(CLIBinary + " serve")
 	if extra := cfg.Extra; extra != nil {
-		if p, ok := extra["cli_path"].(string); ok && p != "" {
-			cliPath = p
+		if c, ok := extra["command"].(agent.Command); ok && !c.IsZero() {
+			cmd = c
 		}
 	}
-	return &OpenCodeAgent{
+	return &Agent{
 		id:         cfg.ID,
-		cliPath:    cliPath,
+		command:    cmd,
 		workDir:    cfg.WorkingDir,
 		customEnv:  cfg.CustomEnv,
-		state:      StateIdle,
+		state:      agent.StateIdle,
 		httpClient: &http.Client{
 			Timeout: 300 * time.Second,
 		},
 	}
 }
 
-func (a *OpenCodeAgent) ID() string       { return a.id }
-func (a *OpenCodeAgent) Backend() string   { return "opencode" }
-func (a *OpenCodeAgent) Driver() string    { return "http" }
-func (a *OpenCodeAgent) PID() int {
+func (a *Agent) ID() string     { return a.id }
+func (a *Agent) Backend() string { return "cs" }
+func (a *Agent) Driver() string  { return "http" }
+func (a *Agent) PID() int {
 	if a.cmd != nil && a.cmd.Process != nil {
 		return a.cmd.Process.Pid
 	}
 	return 0
 }
-func (a *OpenCodeAgent) SessionID() string { return a.sessionID }
-func (a *OpenCodeAgent) Endpoint() string  { return a.endpoint }
-func (a *OpenCodeAgent) State() AgentState {
+func (a *Agent) SessionID() string { return a.sessionID }
+func (a *Agent) Endpoint() string  { return a.endpoint }
+func (a *Agent) State() agent.AgentState {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.state
 }
 
-func (a *OpenCodeAgent) SetEventEmitter(emitter func(Event)) {
+func (a *Agent) SetEventEmitter(emitter func(agent.Event)) {
 	a.eventEmitter = emitter
 }
 
-func (a *OpenCodeAgent) setState(s AgentState) {
+func (a *Agent) setState(s agent.AgentState) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.state = s
 }
 
-func (a *OpenCodeAgent) emit(event Event) {
+func (a *Agent) emit(event agent.Event) {
 	if a.eventEmitter != nil {
 		a.eventEmitter(event)
 	}
 }
 
-func (a *OpenCodeAgent) Start(ctx context.Context) error {
-	a.setState(StateConnecting)
+func (a *Agent) commandDisplay() string {
+	return strings.Join(a.command.Args, " ")
+}
+
+func (a *Agent) Start(ctx context.Context) error {
+	a.setState(agent.StateConnecting)
 
 	agentCtx, agentCancel := context.WithCancel(ctx)
 	a.cancel = agentCancel
 
-	logger.Info("[debug] spawning '%s serve' and waiting for port...", a.cliPath)
+	logger.Info("[debug] spawning '%s' and waiting for port...", a.commandDisplay())
 	begin := time.Now()
 	endpoint, err := a.spawnAndWaitForPort(agentCtx)
 	logger.Info("[debug] spawnAndWaitForPort took %s, err=%v", time.Since(begin), err)
 	if err != nil {
-		a.setState(StateError)
+		a.setState(agent.StateError)
 		a.cancel = nil
 		agentCancel()
-		return fmt.Errorf("failed to start agent '%s serve': %w", a.cliPath, err)
+		return fmt.Errorf("failed to start agent '%s': %w", a.commandDisplay(), err)
 	}
 	a.endpoint = endpoint
-	logger.Info("opencode endpoint resolved: %s", a.endpoint)
+	logger.Info("cs endpoint resolved: %s", a.endpoint)
 
 	resp, err := a.doGet(agentCtx, "/global/health")
 	if err != nil {
-		a.setState(StateError)
+		a.setState(agent.StateError)
 		a.Kill()
-		return fmt.Errorf("opencode health check failed: %w", err)
+		return fmt.Errorf("cs health check failed: %w", err)
 	}
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		a.setState(StateError)
+		a.setState(agent.StateError)
 		a.Kill()
-		return fmt.Errorf("opencode health check returned status %d", resp.StatusCode)
+		return fmt.Errorf("cs health check returned status %d", resp.StatusCode)
 	}
 
-	a.setState(StateConnected)
+	a.setState(agent.StateConnected)
 
 	go a.subscribeEvents(agentCtx)
 
 	return nil
 }
 
-func (a *OpenCodeAgent) Kill() error {
-	a.setState(StateDisconnected)
+func (a *Agent) Kill() error {
+	a.setState(agent.StateDisconnected)
 
 	if a.cancel != nil {
 		a.cancel()
@@ -155,7 +153,7 @@ func (a *OpenCodeAgent) Kill() error {
 	return nil
 }
 
-func (a *OpenCodeAgent) gracefulShutdown(timeout time.Duration) {
+func (a *Agent) gracefulShutdown(timeout time.Duration) {
 	if a.endpoint != "" && a.httpClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, a.endpoint+"/global/dispose", nil)
@@ -168,7 +166,7 @@ func (a *OpenCodeAgent) gracefulShutdown(timeout time.Duration) {
 		cancel()
 	}
 
-	signalTerminate(a.cmd.Process.Pid)
+	agent.SignalTerminate(a.cmd.Process.Pid)
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -183,14 +181,14 @@ func (a *OpenCodeAgent) gracefulShutdown(timeout time.Duration) {
 		}
 	}
 
-	killProcessTree(a.cmd.Process.Pid)
+	agent.KillProcessTree(a.cmd.Process.Pid)
 	if a.waitCh != nil {
 		<-a.waitCh
 		a.waitCh = nil
 	}
 }
 
-func (a *OpenCodeAgent) SendMessage(ctx context.Context, msg PromptMessage) error {
+func (a *Agent) SendMessage(ctx context.Context, msg agent.PromptMessage) error {
 	if a.sessionID == "" {
 		return fmt.Errorf("no active session")
 	}
@@ -205,7 +203,7 @@ func (a *OpenCodeAgent) SendMessage(ctx context.Context, msg PromptMessage) erro
 	return nil
 }
 
-func (a *OpenCodeAgent) CancelPrompt(ctx context.Context) error {
+func (a *Agent) CancelPrompt(ctx context.Context) error {
 	if a.sessionID == "" {
 		return fmt.Errorf("no active session")
 	}
@@ -213,7 +211,7 @@ func (a *OpenCodeAgent) CancelPrompt(ctx context.Context) error {
 	return err
 }
 
-func (a *OpenCodeAgent) ConfirmPermission(ctx context.Context, callID string, optionID string) error {
+func (a *Agent) ConfirmPermission(ctx context.Context, callID string, optionID string) error {
 	if a.sessionID == "" {
 		return fmt.Errorf("no active session")
 	}
@@ -222,53 +220,56 @@ func (a *OpenCodeAgent) ConfirmPermission(ctx context.Context, callID string, op
 	return err
 }
 
-func (a *OpenCodeAgent) PendingPermissions() []PermissionInfo { return nil }
+func (a *Agent) PendingPermissions() []agent.PermissionInfo { return nil }
 
-func (a *OpenCodeAgent) GetModelInfo() *ModelInfo { return a.modelInfo }
+func (a *Agent) GetModelInfo() *agent.ModelInfo { return a.modelInfo }
 
-func (a *OpenCodeAgent) SetModel(ctx context.Context, modelID string) (*ModelInfo, error) {
+func (a *Agent) SetModel(ctx context.Context, modelID string) (*agent.ModelInfo, error) {
 	return a.modelInfo, nil
 }
 
-func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error) {
-	cliName := a.cliPath
+func (a *Agent) spawnAndWaitForPort(ctx context.Context) (string, error) {
+	args := a.command.Args
+	displayName := a.commandDisplay()
 
-	cmd := exec.CommandContext(ctx, cliName, "serve")
+	execCmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	if a.workDir != "" {
-		cmd.Dir = a.workDir
+		execCmd.Dir = a.workDir
 	}
 	env := append(os.Environ(), "OPENCODE_DISABLE_EMBEDDED_WEB_UI=1")
 	for k, v := range a.customEnv {
 		env = append(env, k+"="+v)
 	}
-	cmd.Env = env
-	setCmdProcessGroup(cmd)
+	execCmd.Env = env
+	agent.SetCmdProcessGroup(execCmd)
 
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := execCmd.StdoutPipe()
 	if err != nil {
 		return "", fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start %s serve: %w", cliName, err)
+	stderrPipe, err := execCmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("stderr pipe: %w", err)
 	}
 
-	a.cmd = cmd
+	if err := execCmd.Start(); err != nil {
+		return "", fmt.Errorf("start %s: %w", displayName, err)
+	}
+
+	a.cmd = execCmd
 	a.waitCh = make(chan error, 1)
-	go func() { a.waitCh <- cmd.Wait() }()
+	go func() { a.waitCh <- execCmd.Wait() }()
 
 	endpointCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
-	go func() {
-		scanner := bufio.NewScanner(stdout)
+	scanOutput := func(r io.Reader, tag string) {
+		scanner := bufio.NewScanner(r)
 		for scanner.Scan() {
 			line := scanner.Text()
-			logger.Debug("opencode stdout: %s", line)
-			for _, pat := range portPatterns {
+			logger.Info("[%s] %s: %s", tag, displayName, line)
+			for _, pat := range agent.PortPatterns {
 				matches := pat.FindStringSubmatch(line)
 				if len(matches) >= 2 {
 					endpointCh <- "http://127.0.0.1:" + matches[1]
@@ -276,13 +277,10 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 				}
 			}
 		}
-		stderr := strings.TrimSpace(stderrBuf.String())
-		if stderr != "" {
-			errCh <- fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
-		} else {
-			errCh <- fmt.Errorf("%s exited unexpectedly (no output)", cliName)
-		}
-	}()
+	}
+
+	go scanOutput(stdout, "stdout")
+	go scanOutput(stderrPipe, "stderr")
 
 	timeout := time.After(30 * time.Second)
 	select {
@@ -291,43 +289,39 @@ func (a *OpenCodeAgent) spawnAndWaitForPort(ctx context.Context) (string, error)
 	case err := <-errCh:
 		return "", err
 	case <-a.waitCh:
-		stderr := strings.TrimSpace(stderrBuf.String())
-		if stderr != "" {
-			return "", fmt.Errorf("%s exited unexpectedly, stderr:\n%s", cliName, stderr)
-		}
-		return "", fmt.Errorf("%s exited unexpectedly (no output)", cliName)
+		return "", fmt.Errorf("%s exited unexpectedly (no matching port output)", displayName)
 	case <-timeout:
-		_ = cmd.Process.Kill()
-		return "", fmt.Errorf("timeout waiting for %s to start", cliName)
+		_ = execCmd.Process.Kill()
+		return "", fmt.Errorf("timeout waiting for %s to start", displayName)
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		_ = execCmd.Process.Kill()
 		return "", ctx.Err()
 	}
 }
 
-type openCodeSession struct {
+type csSession struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	Directory string `json:"directory"`
 	Version   int    `json:"version"`
 }
 
-func (a *OpenCodeAgent) createSession(ctx context.Context) (*openCodeSession, error) {
+func (a *Agent) createSession(ctx context.Context) (*csSession, error) {
 	respBody, err := a.doPost(ctx, "/session/", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
-	var session openCodeSession
+	var session csSession
 	if err := json.Unmarshal(respBody, &session); err != nil {
 		return nil, fmt.Errorf("parse session response: %w", err)
 	}
 	return &session, nil
 }
 
-func (a *OpenCodeAgent) subscribeEvents(ctx context.Context) {
+func (a *Agent) subscribeEvents(ctx context.Context) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.endpoint+"/event", nil)
 	if err != nil {
-		logger.Error("opencode event subscribe: %v", err)
+		logger.Error("cs event subscribe: %v", err)
 		return
 	}
 
@@ -335,7 +329,7 @@ func (a *OpenCodeAgent) subscribeEvents(ctx context.Context) {
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == nil {
-			logger.Error("opencode event stream error: %v", err)
+			logger.Error("cs event stream error: %v", err)
 		}
 		return
 	}
@@ -355,12 +349,12 @@ func (a *OpenCodeAgent) subscribeEvents(ctx context.Context) {
 				return
 			}
 			if err == io.EOF {
-				logger.Info("opencode event stream closed, reconnecting")
+				logger.Info("cs event stream closed, reconnecting")
 				time.Sleep(time.Second)
 				go a.subscribeEvents(ctx)
 				return
 			}
-			logger.Error("opencode event read error: %v", err)
+			logger.Error("cs event read error: %v", err)
 			return
 		}
 
@@ -380,17 +374,17 @@ func (a *OpenCodeAgent) subscribeEvents(ctx context.Context) {
 			eventType, _ := raw["type"].(string)
 			props, _ := raw["properties"].(map[string]any)
 
-			a.emit(Event{
+			a.emit(agent.Event{
 				Type:           eventType,
 				ConversationID: a.sessionID,
-				Backend:        "opencode",
+				Backend:        "cs",
 				Data:           props,
 			})
 		}
 	}
 }
 
-func (a *OpenCodeAgent) doGet(ctx context.Context, path string) (*http.Response, error) {
+func (a *Agent) doGet(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.endpoint+path, nil)
 	if err != nil {
 		return nil, err
@@ -398,7 +392,7 @@ func (a *OpenCodeAgent) doGet(ctx context.Context, path string) (*http.Response,
 	return a.httpClient.Do(req)
 }
 
-func (a *OpenCodeAgent) doPost(ctx context.Context, path string, body any) (json.RawMessage, error) {
+func (a *Agent) doPost(ctx context.Context, path string, body any) (json.RawMessage, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)

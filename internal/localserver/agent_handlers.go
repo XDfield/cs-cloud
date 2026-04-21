@@ -8,11 +8,17 @@ import (
 )
 
 type agentHealthProbeResult struct {
-	Available bool   `json:"available"`
-	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Available bool   `json:"available" example:"true"`
+	LatencyMs int64  `json:"latency_ms,omitempty" example:"15"`
 	Error     string `json:"error,omitempty"`
 }
 
+// @Summary      List detected agents
+// @Description  Detects agent backends available on the system and returns their metadata.
+// @Tags         Agent
+// @Produce      json
+// @Success      200  {object}  envelope{data=map[string]any}
+// @Router       /agents [get]
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	detected, err := s.manager.DetectAgents(ctx)
@@ -40,6 +46,13 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, map[string]any{"agents": agents})
 }
 
+// @Summary      Probe running agents health
+// @Description  Checks each running agent's health by probing its /global/health endpoint. Records the workspace from X-Workspace-Directory header.
+// @Tags         Agent
+// @Produce      json
+// @Success      200  {object}  envelope{data=map[string]any}
+// @Failure      503  {object}  envelope
+// @Router       /agents/health [get]
 func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
 	if dir := r.Header.Get(workspaceDirHeader); dir != "" {
 		if abs, err := filepath.Abs(filepath.Clean(dir)); err == nil {

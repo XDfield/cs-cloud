@@ -43,6 +43,17 @@ type inputReq struct {
 	Data string `json:"data"`
 }
 
+// @Summary      Create terminal session
+// @Description  Creates a new PTY terminal session. Maximum 20 concurrent sessions.
+// @Tags         Terminal
+// @Accept       json
+// @Produce      json
+// @Param        body  body  createReq  true  "Terminal creation parameters"
+// @Success      200  {object}  responseEnvelope{data=sessionResp}
+// @Failure      400  {object}  responseEnvelope
+// @Failure      409  {object}  responseEnvelope
+// @Failure      500  {object}  responseEnvelope
+// @Router       /terminal [post]
 func (h *Handlers) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := readBody(r)
 	if err != nil {
@@ -82,6 +93,14 @@ func (h *Handlers) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, sessionResp{SessionID: s.ID, Pid: s.Pid})
 }
 
+// @Summary      Kill terminal session
+// @Description  Terminates the PTY process and removes the session.
+// @Tags         Terminal
+// @Produce      json
+// @Param        id  path  string  true  "Terminal session ID"
+// @Success      200  {object}  responseEnvelope{data=map[string]any}
+// @Failure      404  {object}  responseEnvelope
+// @Router       /terminal/{id} [delete]
 func (h *Handlers) HandleKill(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.mgr.Kill(id); err != nil {
@@ -91,6 +110,17 @@ func (h *Handlers) HandleKill(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, struct{}{})
 }
 
+// @Summary      Resize terminal
+// @Description  Changes the PTY dimensions (rows and columns).
+// @Tags         Terminal
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string    true  "Terminal session ID"
+// @Param        body  body  resizeReq  true  "New dimensions"
+// @Success      200  {object}  responseEnvelope{data=map[string]any}
+// @Failure      400  {object}  responseEnvelope
+// @Failure      404  {object}  responseEnvelope
+// @Router       /terminal/{id}/resize [post]
 func (h *Handlers) HandleResize(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req resizeReq
@@ -105,6 +135,17 @@ func (h *Handlers) HandleResize(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, struct{}{})
 }
 
+// @Summary      Restart terminal session
+// @Description  Restarts the PTY process, optionally with a new working directory.
+// @Tags         Terminal
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string      true  "Terminal session ID"
+// @Param        body  body  restartReq  false  "Restart parameters"
+// @Success      200  {object}  responseEnvelope{data=sessionResp}
+// @Failure      400  {object}  responseEnvelope
+// @Failure      404  {object}  responseEnvelope
+// @Router       /terminal/{id}/restart [post]
 func (h *Handlers) HandleRestart(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req restartReq
@@ -121,6 +162,17 @@ func (h *Handlers) HandleRestart(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, sessionResp{SessionID: s.ID, Pid: s.Pid})
 }
 
+// @Summary      Send input to terminal
+// @Description  Sends raw bytes (base64-encoded) to the PTY stdin.
+// @Tags         Terminal
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string    true  "Terminal session ID"
+// @Param        body  body  inputReq  true  "Base64-encoded input data"
+// @Success      200  {object}  responseEnvelope{data=map[string]any}
+// @Failure      400  {object}  responseEnvelope
+// @Failure      404  {object}  responseEnvelope
+// @Router       /terminal/{id}/input [post]
 func (h *Handlers) HandleInput(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req inputReq
@@ -142,6 +194,15 @@ func (h *Handlers) HandleInput(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, struct{}{})
 }
 
+// @Summary      SSE terminal output stream
+// @Description  Subscribes to terminal output as an SSE stream. Events: connected, data (base64-encoded), heartbeat, exit.
+// @Tags         Terminal
+// @Produce      text/event-stream
+// @Param        id          path  int     true  "Terminal session ID"
+// @Param        heartbeat   query  int    false  "Heartbeat interval in seconds"  minimum(1)  default(15)
+// @Success      200  {string}  string  "SSE stream"
+// @Failure      404  {object}  responseEnvelope
+// @Router       /terminal/{id}/stream [get]
 func (h *Handlers) HandleStream(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 

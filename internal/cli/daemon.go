@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"cs-cloud/internal/agent"
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/localserver"
@@ -133,14 +132,15 @@ func runDaemon(a *app.App) error {
 	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
 	ctx := context.Background()
-	cliPath := a.Config().AgentCLIPath
-	if cliPath == "" {
-		cliPath = agent.OpenCodeCLIBinary
+	agentType := a.Config().DefaultAgent
+	agentCommand := a.Config().AgentCommand
+	if agentType == "" {
+		agentType = "cs"
 	}
-	logger.Info("[debug] detecting agent CLI '%s'...", cliPath)
-	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath, a.Config().AgentEnv); err != nil {
+	logger.Info("[debug] detecting agent (type=%s, command=%q)...", agentType, agentCommand)
+	if err := srv.Manager().InitDefaultAgent(ctx, agentType, agentCommand, a.Config().AgentWorkspace, a.Config().AgentEnv); err != nil {
 		logger.Error("failed to init agent: %v", err)
-		logger.Error("please check that '%s serve' works correctly in your terminal", cliPath)
+		logger.Error("please check your agent_command configuration works correctly in your terminal")
 		return err
 	}
 	logger.Info("agent started (endpoint=%s)", srv.Manager().Endpoint())
@@ -168,6 +168,7 @@ func runDaemon(a *app.App) error {
 	}
 
 	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
+	logger.Info("swagger docs: %s/api/v1/docs", srv.URL())
 	recent, err := a.LoadRecentWorkspaces()
 	if err != nil {
 		logger.Warn("failed to load recent workspaces: %v", err)

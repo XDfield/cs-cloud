@@ -52,12 +52,18 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /runtime/health", s.handleHealth)
 	api.HandleFunc("GET /runtime/config", s.handleRuntimeConfig)
 	api.HandleFunc("GET /runtime/files", s.handleFileList)
+	api.HandleFunc("GET /runtime/files/meta", s.handleFileMeta)
 	api.HandleFunc("GET /runtime/files/content", s.handleFileContent)
 	api.HandleFunc("GET /runtime/find/file", s.handleFindFiles)
 	api.HandleFunc("GET /runtime/path", s.handlePath)
 	api.HandleFunc("GET /runtime/vcs", s.handleVcs)
 	api.HandleFunc("GET /runtime/diff", s.handleDiff)
+	api.HandleFunc("GET /runtime/diff/content", s.handleDiffContent)
 	api.HandleFunc("POST /runtime/dispose", s.handleInstanceDispose)
+
+	api.HandleFunc("GET /openapi.json", s.handleOpenAPISpec)
+	api.HandleFunc("GET /docs", s.handleSwaggerUI)
+	api.HandleFunc("GET /docs/", s.handleSwaggerUI)
 
 	api.HandleFunc("GET /agents", s.handleListAgents)
 	api.HandleFunc("GET /agents/health", s.handleAgentHealth)

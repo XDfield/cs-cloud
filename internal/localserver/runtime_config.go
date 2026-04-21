@@ -7,13 +7,19 @@ import (
 )
 
 type runtimeConfigData struct {
-	AllowAbsolutePaths bool     `json:"allow_absolute_paths"`
-	MaxListDepth       int      `json:"max_list_depth"`
-	AllowedOperations  []string `json:"allowed_operations"`
-	BlacklistCount     int      `json:"blacklist_count"`
-	WhitelistEnabled   bool     `json:"whitelist_enabled"`
+	AllowAbsolutePaths bool     `json:"allow_absolute_paths" example:"true"`
+	MaxListDepth       int      `json:"max_list_depth" example:"0"`
+	AllowedOperations  []string `json:"allowed_operations" example:"list,read,search"`
+	BlacklistCount     int      `json:"blacklist_count" example:"0"`
+	WhitelistEnabled   bool     `json:"whitelist_enabled" example:"false"`
 }
 
+// @Summary      Get runtime security configuration
+// @Description  Returns workspace sandbox settings including path access controls and allowed operations.
+// @Tags         Runtime
+// @Produce      json
+// @Success      200  {object}  envelope{data=runtimeConfigData}
+// @Router       /runtime/config [get]
 func (s *Server) handleRuntimeConfig(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.runtimeCfg
 	writeOK(w, runtimeConfigData{

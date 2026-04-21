@@ -3,9 +3,12 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"cs-cloud/internal/agent"
+	agentcs "cs-cloud/internal/agent/cs"
+	agentcsc "cs-cloud/internal/agent/csc"
 )
 
 type AgentManager struct {
@@ -195,18 +198,44 @@ func (m *AgentManager) DefaultBackend() string {
 	return ""
 }
 
-func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, agentEnv map[string]string) error {
-	d := agent.NewOpenCodeDriver(cliPath)
-	m.RegisterDriver(d)
+func (m *AgentManager) InitDefaultAgent(ctx context.Context, agentType string, agentCommand string, agentWorkspace string, agentEnv map[string]string) error {
+	if agentType == "" {
+		agentType = "cs"
+	}
 
-	resolved := cliPath
-	if resolved == "" {
-		resolved = agent.OpenCodeCLIBinary
+	var defaultCmd string
+	switch agentType {
+	case "cs":
+		defaultCmd = agentcs.CLIBinary + " serve"
+	case "csc":
+		defaultCmd = agentcsc.CLIBinary + " serve"
+	default:
+		return fmt.Errorf("unknown agent type: %s (available: cs, csc)", agentType)
+	}
+
+	cmd := agent.ParseCommand(defaultCmd)
+	if agentCommand != "" {
+		cmd = agent.ParseCommand(agentCommand)
+	}
+
+	drivers := map[string]agent.Driver{
+		"cs":  agentcs.NewDriver(cmd),
+		"csc": agentcsc.NewDriver(cmd),
+	}
+
+	for name, d := range drivers {
+		m.RegisterDriver(d)
+		_ = name
+	}
+
+	d, ok := drivers[agentType]
+	if !ok {
+		return fmt.Errorf("unknown agent type: %s (available: cs, csc)", agentType)
 	}
 
 	detected, _ := d.Detect(ctx)
 	if len(detected) == 0 || !detected[0].Available {
-		return fmt.Errorf("agent CLI '%s' not found in PATH, please ensure it is installed correctly", resolved)
+		return fmt.Errorf("agent command '%s' not found, please ensure it is installed correctly", strings.Join(cmd.Args, " "))
 	}
 
 	var extra map[string]any
@@ -215,9 +244,9 @@ func (m *AgentManager) InitDefaultAgent(ctx context.Context, cliPath string, age
 	}
 	cfg := agent.AgentConfig{
 		ID:         "default",
-		Backend:    "opencode",
+		Backend:    agentType,
 		DriverName: "http",
-		WorkingDir: "",
+		WorkingDir: agentWorkspace,
 		CustomEnv:  agentEnv,
 		Extra:      extra,
 	}

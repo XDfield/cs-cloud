@@ -141,6 +141,7 @@ waitDone:
 	printKV("pid", fmt.Sprintf("%d", cmd.Process.Pid))
 	printKV("mode", mode)
 	printKV("url", url)
+	printKV("docs", url+"/api/v1/docs")
 	printKV("logs", filepath.Join(a.RootDir(), "app.log"))
 	return nil
 }

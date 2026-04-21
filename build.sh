@@ -13,6 +13,7 @@ CMD="./cmd/cs-cloud"
 case "${1:-build}" in
   build)
     mkdir -p bin
+    swag init -g cmd/cs-cloud/main.go -o internal/localserver/apidocs --parseDependency --parseInternal 2>/dev/null || true
     go build -trimpath -ldflags "\
       -s -w \
       -X cs-cloud/internal/version.Version=${VERSION} \
