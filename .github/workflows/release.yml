@@ -19,6 +19,8 @@ jobs:
         with:
           go-version-file: go.mod
         id: setup-go
+      - name: Install swag
+        run: go install github.com/swaggo/swag/cmd/swag@latest
       - name: Generate SHA256 per archive
         run: |
           cat > .goreleaser-after.sh << 'SCRIPT'
