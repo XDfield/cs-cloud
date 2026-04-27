@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"cs-cloud/internal/logger"
@@ -77,6 +78,17 @@ func (s *Server) handleVcs(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  envelope{data=map[string]bool}
 // @Router       /runtime/dispose [post]
 func (s *Server) handleInstanceDispose(w http.ResponseWriter, r *http.Request) {
+	workspace := r.Header.Get(workspaceDirHeader)
+	if workspace != "" {
+		if abs, err := filepath.Abs(filepath.Clean(workspace)); err == nil {
+			s.invalidateFindFilesCache(abs)
+		} else {
+			s.invalidateFindFilesCache(filepath.Clean(workspace))
+		}
+	} else {
+		s.invalidateFindFilesCache("")
+	}
+
 	s.manager.KillAll()
 
 	ctx := r.Context()

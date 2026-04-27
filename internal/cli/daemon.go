@@ -50,6 +50,7 @@ func prewarmServer(ctx context.Context, base string, dir string) {
 		"/command",
 		"/provider/capabilities",
 		"/vcs",
+		"/runtime/find/file?query=package&dirs=true&limit=20",
 	}
 	start := time.Now()
 	logger.Info("server prewarm started (workspace=%s)", dir)

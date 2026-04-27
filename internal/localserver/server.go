@@ -27,6 +27,10 @@ type Server struct {
 	cfg        *config.Config
 	rootDir    string
 	recentMu   sync.Mutex
+
+	findFilesMu     sync.Mutex
+	findFilesCache  map[string]*fileSearchIndex
+	findFilesBuilds map[string]*fileSearchBuild
 }
 
 func New(opts ...Option) *Server {
