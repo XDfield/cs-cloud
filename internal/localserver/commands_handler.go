@@ -32,7 +32,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeOK(w, map[string]any{"commands": manifest})
+	writeJSON(w, http.StatusOK, manifest)
 }
 
 func fetchOpenCodeCommands(endpoint string) ([]Command, error) {
