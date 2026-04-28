@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,7 +19,6 @@ import (
 	"cs-cloud/internal/tunnel"
 	"cs-cloud/internal/version"
 )
-
 
 func prewarmRequest(ctx context.Context, cli *http.Client, base string, path string, dir string) {
 	begin := time.Now()
@@ -128,6 +128,11 @@ func runDaemon(a *app.App) error {
 
 	mode := a.LoadMode()
 	a.SaveArgs(os.Args[1:])
+	port, err := parsePort()
+	if err != nil {
+		logger.Error("invalid port: %v", err)
+		return err
+	}
 
 	logger.Info("[debug] initializing local server...")
 	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
@@ -154,7 +159,7 @@ func runDaemon(a *app.App) error {
 		}
 	}
 
-	if err := srv.Start("127.0.0.1:0"); err != nil {
+	if err := srv.Start(fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
 		logger.Error("failed to start server: %v", err)
 		return err
 	}

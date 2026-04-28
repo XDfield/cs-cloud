@@ -31,6 +31,10 @@ func start(a *app.App) error {
 	defer stop()
 
 	mode := parseMode()
+	port, err := parsePort()
+	if err != nil {
+		return err
+	}
 
 	if mode == "cloud" {
 		info, err := registerWithLogin(ctx, a)
@@ -42,14 +46,14 @@ func start(a *app.App) error {
 
 		if err := device.ValidateDeviceToken(ctx, info); err != nil {
 			if device.IsInvalidDeviceTokenError(err) {
-		fmt.Println("device token is invalid, regenerating...")
-			_ = device.ClearDevice()
-			info, err = registerWithLogin(ctx, a)
-			if err != nil {
-				return err
-			}
-			printWarn("Device re-registered")
-			printKV("device_id", info.DeviceID)
+				fmt.Println("device token is invalid, regenerating...")
+				_ = device.ClearDevice()
+				info, err = registerWithLogin(ctx, a)
+				if err != nil {
+					return err
+				}
+				printWarn("Device re-registered")
+				printKV("device_id", info.DeviceID)
 				if err := device.ValidateDeviceToken(ctx, info); err != nil {
 					return err
 				}
@@ -87,6 +91,9 @@ func start(a *app.App) error {
 	}
 	if d := platform.DataDir(); d != "" {
 		daemonArgs = append(daemonArgs, "--data-dir", d)
+	}
+	if port > 0 {
+		daemonArgs = append(daemonArgs, "--port", fmt.Sprintf("%d", port))
 	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)
