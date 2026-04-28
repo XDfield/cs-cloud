@@ -85,7 +85,6 @@ func (d *OpenCodeDriver) ProxyRoutes() []ProxyRoute {
 		{http.MethodGet, "/events", rewriteTo("/event")},
 		{http.MethodGet, "/agents/models", rewriteTo("/provider/capabilities")},
 		{http.MethodGet, "/agents/session-modes", rewriteTo("/agent")},
-		{http.MethodGet, "/agents/commands", rewriteTo("/command")},
 		{http.MethodGet, "/agents/mcp", rewriteTo("/mcp")},
 		{http.MethodGet, "/agents/lsp", rewriteTo("/lsp")},
 	}

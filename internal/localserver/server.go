@@ -55,7 +55,7 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /agents/health", s.handleAgentHealth)
 	api.HandleFunc("GET /agents/models", s.handleProxy)
 	api.HandleFunc("GET /agents/session-modes", s.handleProxy)
-	api.HandleFunc("GET /agents/commands", s.handleProxy)
+	api.HandleFunc("GET /agents/commands", s.handleCommands)
 	api.HandleFunc("GET /agents/mcp", s.handleProxy)
 	api.HandleFunc("GET /agents/lsp", s.handleProxy)
 
