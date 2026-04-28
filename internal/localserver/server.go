@@ -4,8 +4,10 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
+	"cs-cloud/internal/config"
 	"cs-cloud/internal/runtime"
 	"cs-cloud/internal/terminal"
 )
@@ -21,20 +23,29 @@ type Server struct {
 	termMgr    *terminal.TerminalManager
 	termH      *terminal.Handlers
 	inputWsH   *terminal.InputWsHandler
+	runtimeCfg config.RuntimeConfig
+	cfg        *config.Config
+	rootDir    string
+	recentMu   sync.Mutex
+
+	findFilesMu     sync.Mutex
+	findFilesCache  map[string]*fileSearchIndex
+	findFilesBuilds map[string]*fileSearchBuild
 }
 
 func New(opts ...Option) *Server {
 	initStartTime()
 
 	s := &Server{
-		eventBus: runtime.NewEventBus(),
+		eventBus:   runtime.NewEventBus(),
+		runtimeCfg: defaultRuntimeConfig(),
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	s.manager = runtime.NewAgentManager(s.eventBus)
 
-	s.termMgr = terminal.NewManager()
+	s.termMgr = terminal.NewManager(terminal.WithConfig(s.cfg))
 	s.termH = terminal.NewHandlers(s.termMgr)
 	s.inputWsH = terminal.NewInputWsHandler(s.termMgr)
 
@@ -43,13 +54,20 @@ func New(opts ...Option) *Server {
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", api))
 
 	api.HandleFunc("GET /runtime/health", s.handleHealth)
+	api.HandleFunc("GET /runtime/config", s.handleRuntimeConfig)
 	api.HandleFunc("GET /runtime/files", s.handleFileList)
+	api.HandleFunc("GET /runtime/files/meta", s.handleFileMeta)
 	api.HandleFunc("GET /runtime/files/content", s.handleFileContent)
 	api.HandleFunc("GET /runtime/find/file", s.handleFindFiles)
 	api.HandleFunc("GET /runtime/path", s.handlePath)
 	api.HandleFunc("GET /runtime/vcs", s.handleVcs)
 	api.HandleFunc("GET /runtime/diff", s.handleDiff)
+	api.HandleFunc("GET /runtime/diff/content", s.handleDiffContent)
 	api.HandleFunc("POST /runtime/dispose", s.handleInstanceDispose)
+
+	api.HandleFunc("GET /openapi.json", s.handleOpenAPISpec)
+	api.HandleFunc("GET /docs", s.handleSwaggerUI)
+	api.HandleFunc("GET /docs/", s.handleSwaggerUI)
 
 	api.HandleFunc("GET /agents", s.handleListAgents)
 	api.HandleFunc("GET /agents/health", s.handleAgentHealth)
@@ -104,6 +122,18 @@ func WithVersion(v string) Option {
 	return func(s *Server) { s.version = v }
 }
 
+func WithRuntimeConfig(cfg config.RuntimeConfig) Option {
+	return func(s *Server) { s.runtimeCfg = cfg }
+}
+
+func WithConfig(cfg *config.Config) Option {
+	return func(s *Server) { s.cfg = cfg }
+}
+
+func WithRootDir(dir string) Option {
+	return func(s *Server) { s.rootDir = dir }
+}
+
 func (s *Server) Manager() *runtime.AgentManager {
 	return s.manager
 }
@@ -137,6 +167,7 @@ func (s *Server) Port() int {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.manager.KillAll()
 	s.termMgr.CloseAll()
 	return s.http.Shutdown(ctx)
 }

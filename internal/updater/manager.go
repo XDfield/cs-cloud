@@ -33,6 +33,7 @@ type Manager struct {
 	running      bool
 	lastCheck    time.Time
 	lastResult   *CheckResult
+	RestartCh    chan struct{}
 }
 
 type Option func(*Manager)
@@ -47,14 +48,20 @@ func WithInterval(d time.Duration) Option {
 
 func NewManager(cloudBaseURL, rootDir string, opts ...Option) *Manager {
 	upgradesDir := filepath.Join(rootDir, "upgrades")
+	exe, _ := os.Executable()
+	exeDir := ""
+	if exe != "" {
+		exeDir = filepath.Dir(exe)
+	}
 	m := &Manager{
 		checker:     NewChecker(cloudBaseURL),
-		downloader:  NewDownloader(filepath.Join(upgradesDir, "tmp")),
+		downloader:  NewDownloader(filepath.Join(exeDir, ".cs-cloud-update")),
 		verifier:    NewVerifier(),
 		replacer:    NewReplacer(upgradesDir),
 		policy:      PolicyAuto,
 		interval:    6 * time.Hour,
 		upgradesDir: upgradesDir,
+		RestartCh:   make(chan struct{}, 1),
 	}
 	for _, o := range opts {
 		o(m)
@@ -103,7 +110,7 @@ func (m *Manager) Apply(ctx context.Context, targetVersion string) error {
 	if err != nil {
 		return fmt.Errorf("check: %w", err)
 	}
-	if !result.Available {
+	if !result.CanUpdate {
 		return fmt.Errorf("no update available")
 	}
 	if targetVersion != "" && result.Version != targetVersion {
@@ -117,6 +124,10 @@ func (m *Manager) Rollback() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve exe: %w", err)
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return fmt.Errorf("resolve exe symlink: %w", err)
 	}
 	if err := m.replacer.Rollback(exe); err != nil {
 		return err
@@ -146,7 +157,7 @@ func (m *Manager) doCheck(ctx context.Context) {
 	m.lastCheck = time.Now()
 	m.lastResult = result
 
-	if !result.Available {
+	if !result.CanUpdate {
 		logger.Info("no update available (current: %s)", version.Get())
 		return
 	}
@@ -210,6 +221,10 @@ func (m *Manager) executeUpgrade(ctx context.Context, result *CheckResult) error
 	}
 
 	logger.Info("upgrade to %s completed, requesting restart", result.Version)
+	select {
+	case m.RestartCh <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -222,11 +237,6 @@ func (m *Manager) downloadAndVerify(ctx context.Context, result *CheckResult) (s
 	path, err := m.downloader.Download(ctx, result.DownloadURL, result.SHA256)
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
-	}
-
-	if err := m.verifier.VerifySHA256(path, result.SHA256); err != nil {
-		cleanupFile(path)
-		return "", fmt.Errorf("verify: %w", err)
 	}
 
 	logger.Info("download verified (sha256 ok)")
@@ -248,6 +258,7 @@ func (m *Manager) verifyOnStartup() {
 		logger.Error("version mismatch after upgrade, expected %s but running %s, rolling back", state.CurrentVersion, version.Get())
 		exe, _ := os.Executable()
 		if exe != "" {
+			exe, _ = filepath.EvalSymlinks(exe)
 			if rerr := m.replacer.Rollback(exe); rerr != nil {
 				logger.Error("rollback failed: %v", rerr)
 			}

@@ -1,5 +1,14 @@
 package config
 
 func Default() *Config {
-	return &Config{}
+	return &Config{
+		DefaultAgent: "cs",
+		Runtime: RuntimeConfig{
+			AllowAbsolutePaths: true,
+			MaxListDepth:       0,
+			AllowedOperations:  []string{"list", "read", "search"},
+			BlacklistCount:     0,
+			WhitelistEnabled:   false,
+		},
+	}
 }

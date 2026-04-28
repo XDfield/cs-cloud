@@ -14,19 +14,30 @@ import (
 )
 
 type fileEntry struct {
-	Name     string    `json:"name"`
-	Type     string    `json:"type"`
-	Size     int64     `json:"size"`
+	Name     string    `json:"name" example:"main.go"`
+	Type     string    `json:"type" example:"file"`
+	Size     int64     `json:"size" example:"1024"`
 	Modified time.Time `json:"modified"`
 }
 
 type fileListData struct {
-	Path    string      `json:"path"`
+	Path    string      `json:"path" example:"/home/user/project"`
 	Entries []fileEntry `json:"entries"`
 }
 
+// @Summary      List files and directories
+// @Description  List files and subdirectories under a given path. Paths are sandboxed to the workspace directory (set via X-Workspace-Directory header).
+// @Tags         Runtime
+// @Produce      json
+// @Param        path       query  string  false  "File or directory path (relative to workspace or absolute if allowed)"  default(".")
+// @Param        recursive  query  string  false  "Recursive listing"  Enums(true, false)  default(false)
+// @Param        limit      query  int     false  "Max entries to return"  minimum(1)  default(1000)
+// @Success      200  {object}  envelope{data=fileListData}
+// @Failure      400  {object}  envelope
+// @Failure      404  {object}  envelope
+// @Router       /runtime/files [get]
 func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
-	dirPath := r.URL.Query().Get("path")
+	dirPath := decodeQueryParam(r.URL.Query().Get("path"))
 	if dirPath == "" {
 		dirPath = "."
 	}
@@ -39,7 +50,7 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	absPath, _, err := resolvePath(r, dirPath)
+	absPath, _, err := s.resolvePath(r, dirPath)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -148,15 +159,78 @@ func walkDir(root, current string, limit int) ([]fileEntry, error) {
 }
 
 type fileContentData struct {
-	Path        string `json:"path"`
-	Content     string `json:"content"`
-	Lines       int    `json:"lines"`
-	Offset      int    `json:"offset"`
-	TotalLines  int    `json:"total_lines"`
+	Path       string `json:"path" example:"/home/user/project/main.go"`
+	Content    string `json:"content"`
+	Lines      int    `json:"lines" example:"50"`
+	Offset     int    `json:"offset" example:"1"`
+	TotalLines int    `json:"total_lines" example:"200"`
 }
 
+type fileMetaData struct {
+	Path     string    `json:"path" example:"/home/user/project/main.go"`
+	Size     int64     `json:"size" example:"1024"`
+	Modified time.Time `json:"modified"`
+	Type     string    `json:"type" example:"file"`
+}
+
+// @Summary      Get file metadata
+// @Description  Read metadata for a file or directory. Path is sandboxed to the workspace directory.
+// @Tags         Runtime
+// @Produce      json
+// @Param        path  query  string  true  "File path (relative to workspace or absolute if allowed)"
+// @Success      200  {object}  envelope{data=fileMetaData}
+// @Failure      400  {object}  envelope
+// @Failure      404  {object}  envelope
+// @Router       /runtime/files/meta [get]
+func (s *Server) handleFileMeta(w http.ResponseWriter, r *http.Request) {
+	filePath := decodeQueryParam(r.URL.Query().Get("path"))
+	if filePath == "" {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "path is required")
+		return
+	}
+
+	absPath, _, err := s.resolvePath(r, filePath)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeErr(w, http.StatusNotFound, "NOT_FOUND", fmt.Sprintf("path not found: %s", absPath))
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+
+	typ := "file"
+	if info.IsDir() {
+		typ = "directory"
+	}
+
+	writeOK(w, fileMetaData{
+		Path:     absPath,
+		Size:     info.Size(),
+		Modified: info.ModTime().UTC(),
+		Type:     typ,
+	})
+}
+
+// @Summary      Read file content
+// @Description  Read file content with line-based slicing. Path is sandboxed to the workspace directory.
+// @Tags         Runtime
+// @Produce      json
+// @Param        path    query  string  true  "File path (relative to workspace or absolute if allowed)"
+// @Param        offset  query  int     false  "Starting line number (1-indexed)"  minimum(1)  default(1)
+// @Param        limit   query  int     false  "Max lines to return"  minimum(1)  default(2000)
+// @Success      200  {object}  envelope{data=fileContentData}
+// @Failure      400  {object}  envelope
+// @Failure      404  {object}  envelope
+// @Router       /runtime/files/content [get]
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
-	filePath := r.URL.Query().Get("path")
+	filePath := decodeQueryParam(r.URL.Query().Get("path"))
 	if filePath == "" {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", "path is required")
 		return
@@ -176,7 +250,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	absPath, _, err := resolvePath(r, filePath)
+	absPath, _, err := s.resolvePath(r, filePath)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

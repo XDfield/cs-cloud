@@ -1,11 +1,15 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 type ProxyRoute struct {
-	Method   string
-	Prefix   string
-	Rewrite  func(pathValues map[string]string) string
+	Method      string
+	Prefix      string
+	Rewrite     func(pathValues map[string]string) string
+	Transform   func(io.ReadCloser) io.ReadCloser
 }
 
 type Driver interface {
@@ -14,6 +18,7 @@ type Driver interface {
 	CreateAgent(cfg AgentConfig) (Agent, error)
 	HealthCheck(ctx context.Context, backend string) (*HealthResult, error)
 	ProxyRoutes() []ProxyRoute
+	HeaderMap() map[string]string
 }
 
 type DetectedAgent struct {
@@ -28,8 +33,8 @@ type DetectedAgent struct {
 type HealthResult struct {
 	Available bool   `json:"available"`
 	LatencyMs int64  `json:"latency_ms,omitempty"`
-	Version   string `json:"version,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Version   string   `json:"version,omitempty"`
+	Error     string   `json:"error,omitempty"`
 }
 
 type AgentConfig struct {

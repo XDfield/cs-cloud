@@ -88,7 +88,7 @@ func (c *Client) Register(ctx context.Context) (*DeviceInfo, error) {
 
 	info, err := enroll(ctx, creds, base, deviceID)
 	if err != nil {
-		if isAuthError(err) && creds.RefreshToken != "" {
+		if IsAuthError(err) && creds.RefreshToken != "" {
 			creds, err = renew(ctx, creds)
 			if err != nil {
 				return nil, err
@@ -224,7 +224,7 @@ func handleConflict(resp *http.Response, base string) (*DeviceInfo, error) {
 	return nil, fmt.Errorf("device already registered")
 }
 
-func isAuthError(err error) bool {
+func IsAuthError(err error) bool {
 	if err == nil {
 		return false
 	}

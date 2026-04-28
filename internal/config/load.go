@@ -13,11 +13,19 @@ func Load() (*Config, error) {
 		CloudBaseURL: platform.Getenv("CLOUD_BASE_URL"),
 		BaseURL:      platform.Getenv("COSTRICT_BASE_URL"),
 		DefaultShell: platform.Getenv("CS_CLOUD_SHELL"),
-		AgentCLIPath: platform.Getenv("CS_CLOUD_AGENT_CLI"),
+		DefaultAgent: platform.Getenv("CS_CLOUD_DEFAULT_AGENT"),
+		AgentCommand: platform.Getenv("CS_CLOUD_AGENT_COMMAND"),
 	}
 
 	if cfg.CloudBaseURL == "" {
 		cfg.CloudBaseURL = platform.Getenv("COSTRICT_CLOUD_BASE_URL")
+	}
+
+	if envJSON := platform.Getenv("CS_CLOUD_AGENT_ENV"); envJSON != "" {
+		var env map[string]string
+		if err := json.Unmarshal([]byte(envJSON), &env); err == nil {
+			cfg.AgentEnv = env
+		}
 	}
 
 	if p, err := configFilePath(); err == nil {
@@ -33,8 +41,17 @@ func Load() (*Config, error) {
 				if cfg.DefaultShell == "" {
 					cfg.DefaultShell = fileCfg.DefaultShell
 				}
-				if cfg.AgentCLIPath == "" {
-					cfg.AgentCLIPath = fileCfg.AgentCLIPath
+				if cfg.AgentCommand == "" {
+					cfg.AgentCommand = fileCfg.AgentCommand
+				}
+				if cfg.DefaultAgent == "" {
+					cfg.DefaultAgent = fileCfg.DefaultAgent
+				}
+				if cfg.AgentEnv == nil && fileCfg.AgentEnv != nil {
+					cfg.AgentEnv = fileCfg.AgentEnv
+				}
+				if cfg.AgentWorkspace == "" {
+					cfg.AgentWorkspace = fileCfg.AgentWorkspace
 				}
 			}
 		}
@@ -44,9 +61,5 @@ func Load() (*Config, error) {
 }
 
 func configFilePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".cs-cloud", "config.json"), nil
+	return filepath.Join(platform.AppDir(), "config.json"), nil
 }

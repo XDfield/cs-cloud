@@ -1,10 +1,14 @@
 package localserver
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"cs-cloud/internal/logger"
 )
@@ -30,13 +34,15 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rewriteFunc func(map[string]string) string
+	var transformFunc func(io.ReadCloser) io.ReadCloser
+	cleanPath := strings.TrimPrefix(r.URL.Path, "/api/v1")
 	for _, rt := range d.ProxyRoutes() {
 		if r.Method != rt.Method {
 			continue
 		}
-		cleanPath := strings.TrimPrefix(r.URL.Path, "/api/v1")
 		if matchRoute(cleanPath, rt.Prefix) {
 			rewriteFunc = rt.Rewrite
+			transformFunc = rt.Transform
 			break
 		}
 	}
@@ -49,10 +55,25 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	pathValues := extractPathValues(r)
 	target := rewriteFunc(pathValues)
 
+	if transformFunc != nil && r.Body != nil {
+		r.Body = transformFunc(r.Body)
+		buf, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "INTERNAL", "failed to read request body")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(buf))
+		r.ContentLength = int64(len(buf))
+		r.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	}
+
 	targetAddr := targetURL.Scheme + "://" + targetURL.Host + target
-	logger.Info("proxy %s %s -> %s", r.Method, r.URL.Path, targetAddr)
+	start := time.Now()
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	headerMap := d.HeaderMap()
 
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
@@ -60,15 +81,30 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		req.URL.Path = target
 		req.URL.RawPath = ""
 		req.Host = targetURL.Host
+		for from, to := range headerMap {
+			if v := req.Header.Get(from); v != "" {
+				req.Header.Set(to, v)
+			}
+		}
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		logger.Error("proxy %s %s -> %s failed: %v", r.Method, r.URL.Path, targetAddr, err)
+		logger.Error("proxy %s %s -> %s %d %s err: %v", r.Method, r.URL.Path, targetAddr, http.StatusBadGateway, time.Since(start), err)
 		http.Error(w, "bad gateway", http.StatusBadGateway)
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
-		logger.Info("proxy %s %s -> %s %d", r.Method, r.URL.Path, targetAddr, resp.StatusCode)
+		if resp.StatusCode >= 400 {
+			body, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				logger.Error("proxy %s %s -> %s %d %s, failed to read response body: %v", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start), readErr)
+				return nil
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			logger.Error("proxy %s %s -> %s %d %s, body: %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start), body)
+		} else {
+			logger.Info("proxy %s %s -> %s %d %s", r.Method, r.URL.Path, targetAddr, resp.StatusCode, time.Since(start))
+		}
 		return nil
 	}
 

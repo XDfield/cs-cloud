@@ -35,6 +35,11 @@ func logs(a *app.App) error {
 	return nil
 }
 
+func logf(a *app.App) error {
+	tailLogs(a, true)
+	return nil
+}
+
 func tailLogs(a *app.App, follow bool) {
 	path := a.LogFilePath()
 	if _, err := os.Stat(path); err != nil {

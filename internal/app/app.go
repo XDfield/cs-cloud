@@ -1,12 +1,11 @@
 package app
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
 
 	"cs-cloud/internal/config"
 	"cs-cloud/internal/device"
+	"cs-cloud/internal/platform"
 	"cs-cloud/internal/provider"
 )
 
@@ -16,15 +15,11 @@ type App struct {
 }
 
 func New() (*App, error) {
-	root, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("resolve user home: %w", err)
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
 	}
-	return &App{rootDir: filepath.Join(root, ".cs-cloud"), cfg: cfg}, nil
+	return &App{rootDir: platform.AppDir(), cfg: cfg}, nil
 }
 
 func (a *App) RootDir() string  { return a.rootDir }

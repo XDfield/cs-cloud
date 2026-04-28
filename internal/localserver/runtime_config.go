@@ -1,0 +1,42 @@
+package localserver
+
+import (
+	"net/http"
+
+	"cs-cloud/internal/config"
+)
+
+type runtimeConfigData struct {
+	AllowAbsolutePaths bool     `json:"allow_absolute_paths" example:"true"`
+	MaxListDepth       int      `json:"max_list_depth" example:"0"`
+	AllowedOperations  []string `json:"allowed_operations" example:"list,read,search"`
+	BlacklistCount     int      `json:"blacklist_count" example:"0"`
+	WhitelistEnabled   bool     `json:"whitelist_enabled" example:"false"`
+}
+
+// @Summary      Get runtime security configuration
+// @Description  Returns workspace sandbox settings including path access controls and allowed operations.
+// @Tags         Runtime
+// @Produce      json
+// @Success      200  {object}  envelope{data=runtimeConfigData}
+// @Router       /runtime/config [get]
+func (s *Server) handleRuntimeConfig(w http.ResponseWriter, _ *http.Request) {
+	cfg := s.runtimeCfg
+	writeOK(w, runtimeConfigData{
+		AllowAbsolutePaths: cfg.AllowAbsolutePaths,
+		MaxListDepth:       cfg.MaxListDepth,
+		AllowedOperations:  cfg.AllowedOperations,
+		BlacklistCount:     cfg.BlacklistCount,
+		WhitelistEnabled:   cfg.WhitelistEnabled,
+	})
+}
+
+func defaultRuntimeConfig() config.RuntimeConfig {
+	return config.RuntimeConfig{
+		AllowAbsolutePaths: true,
+		MaxListDepth:       0,
+		AllowedOperations:  []string{"list", "read", "search"},
+		BlacklistCount:     0,
+		WhitelistEnabled:   false,
+	}
+}

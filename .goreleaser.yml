@@ -4,6 +4,7 @@ project_name: cs-cloud
 
 before:
   hooks:
+    - swag init -g cmd/cs-cloud/main.go -o internal/localserver/apidocs --parseDependency --parseInternal
     - go mod tidy
 
 builds:
@@ -36,8 +37,11 @@ checksum:
   algorithm: sha256
 
 archives:
-  - format: binary
+  - format: tar.gz
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
 
 release:
   github:

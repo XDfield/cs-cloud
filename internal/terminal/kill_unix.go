@@ -8,6 +8,7 @@ import (
 )
 
 func killProcessTree(pid int) {
+	_ = syscall.Kill(-pid, syscall.SIGTERM)
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return

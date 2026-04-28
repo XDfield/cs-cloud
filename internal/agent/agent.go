@@ -7,6 +7,7 @@ type Agent interface {
 	Backend() string
 	Driver() string
 	State() AgentState
+	PID() int
 
 	Start(ctx context.Context) error
 	Kill() error

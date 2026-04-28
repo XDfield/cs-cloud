@@ -5,8 +5,6 @@ import (
 	"io"
 	"net"
 	"strings"
-
-	"cs-cloud/internal/logger"
 )
 
 func handleStream(stream net.Conn, localPort int) {
@@ -56,8 +54,6 @@ func handleStream(stream net.Conn, localPort int) {
 		if cl, ok := headers["content-length"]; ok {
 			fmt.Sscanf(cl, "%d", &contentLength)
 		}
-
-		logger.Debug("[tunnel] %s %s content-length=%d body-so-far=%d", method, path, contentLength, len(body))
 
 		if contentLength >= 0 {
 			for len(body) < contentLength {

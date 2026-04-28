@@ -17,13 +17,12 @@ func serve(a *app.App) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := localserver.New(localserver.WithVersion(version.Get()))
+	srv := localserver.New(localserver.WithVersion(version.Get()), localserver.WithConfig(a.Config()), localserver.WithRootDir(a.RootDir()))
 
-	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().AgentCLIPath); err != nil {
-		printError("Failed to init agent: %v", err)
-	} else {
-		printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
+	if err := srv.Manager().InitDefaultAgent(ctx, a.Config().DefaultAgent, a.Config().AgentCommand, a.Config().AgentWorkspace, a.Config().AgentEnv); err != nil {
+		return fmt.Errorf("failed to init agent: %w", err)
 	}
+	printSuccess("Agent started (endpoint=%s)", srv.Manager().Endpoint())
 
 	if err := srv.Start("127.0.0.1:0"); err != nil {
 		return err
@@ -35,6 +34,7 @@ func serve(a *app.App) error {
 	printTitle("cs-cloud serve")
 	printSuccess("Server running")
 	printKV("url", srv.URL())
+	printKV("docs", srv.URL()+"/api/v1/docs")
 
 	agents, _ := srv.Manager().DetectAgents(ctx)
 	for _, ag := range agents {

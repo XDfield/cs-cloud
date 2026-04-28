@@ -62,6 +62,8 @@ func start(a *app.App) error {
 
 	_ = a.SaveMode(mode)
 
+	printInfo("Starting daemon...")
+
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
@@ -71,35 +73,62 @@ func start(a *app.App) error {
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
+	defer logFd.Close()
+
+	nullFd, err := openNullDevice()
+	if err != nil {
+		return fmt.Errorf("open null device: %w", err)
+	}
+	defer nullFd.Close()
 
 	daemonArgs := []string{"_daemon"}
 	if p := platform.AuthPath(); p != "" {
 		daemonArgs = append(daemonArgs, "--auth-path", p)
 	}
+	if d := platform.DataDir(); d != "" {
+		daemonArgs = append(daemonArgs, "--data-dir", d)
+	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)
+	cmd.Stdin = nullFd
 	cmd.Stdout = logFd
 	cmd.Stderr = logFd
 	if err := cmd.Start(); err != nil {
-		logFd.Close()
 		return fmt.Errorf("start daemon: %w", err)
 	}
 
 	if err := a.WritePID(cmd.Process.Pid); err != nil {
-		logFd.Close()
 		return err
 	}
 
+	daemonExited := make(chan error, 1)
+	go func() { daemonExited <- cmd.Wait() }()
+
 	ready := false
 	deadline := time.Now().Add(readyTimeout)
+	lastDot := time.Now()
+	dotCount := 0
 	for time.Now().Before(deadline) {
 		if url, _ := a.ServerURL(); url != "" {
 			ready = true
 			break
 		}
+		select {
+		case <-daemonExited:
+			goto waitDone
+		default:
+		}
+		if time.Since(lastDot) >= 3*time.Second {
+			fmt.Print(".")
+			dotCount++
+			lastDot = time.Now()
+		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	logFd.Close()
+waitDone:
+	if dotCount > 0 {
+		fmt.Println()
+	}
 
 	if !ready {
 		printError("Daemon failed to start")
@@ -112,6 +141,7 @@ func start(a *app.App) error {
 	printKV("pid", fmt.Sprintf("%d", cmd.Process.Pid))
 	printKV("mode", mode)
 	printKV("url", url)
+	printKV("docs", url+"/api/v1/docs")
 	printKV("logs", filepath.Join(a.RootDir(), "app.log"))
 	return nil
 }
@@ -119,7 +149,7 @@ func start(a *app.App) error {
 func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, error) {
 	info, err := device.Register(ctx, a.Config())
 	if err != nil {
-		if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) {
+		if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) || device.IsAuthError(err) {
 			printInfo("Cloud registration requires CoStrict login, starting login flow...")
 			if _, loginErr := provider.LoginCoStrict(ctx); loginErr != nil {
 				return nil, loginErr
@@ -129,7 +159,7 @@ func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, err
 		}
 		if device.IsInvalidDeviceTokenError(err) {
 			_ = device.ClearDevice()
-			if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) {
+			if device.IsMissingAuthError(err) || device.IsExpiredAuthError(err) || device.IsAuthError(err) {
 				_, _ = provider.LoginCoStrict(ctx)
 			}
 			info, err = device.Register(ctx, a.Config())

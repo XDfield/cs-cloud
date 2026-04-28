@@ -5,6 +5,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 )
@@ -23,7 +24,13 @@ func (a *App) StopDaemon() bool {
 	pid, err := a.ReadPID()
 	if err != nil || !a.IsProcessRunning(pid) {
 		a.RemovePID()
+		a.RemoveAgentPID()
 		return false
+	}
+
+	if agentPID, err := a.ReadAgentPID(); err == nil && agentPID > 0 {
+		forceKill(agentPID)
+		a.RemoveAgentPID()
 	}
 
 	os.WriteFile(a.stopFile(), []byte(fmt.Sprintf("%d", time.Now().UnixMilli())), 0o644)
@@ -44,9 +51,8 @@ func (a *App) StopDaemon() bool {
 }
 
 func forceKill(pid int) {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return
-	}
-	_ = proc.Kill()
+	cmd := exec.Command("taskkill", "/pid", fmt.Sprintf("%d", pid), "/f", "/t")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	_ = cmd.Run()
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ type TerminalManager struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 	shell    string
+	fallbackShells []string
 	maxSlots int
 	cfg      *config.Config
 }
@@ -42,8 +44,8 @@ func NewManager(opts ...Option) *TerminalManager {
 	for _, o := range opts {
 		o(m)
 	}
-	m.shell = discoverShell(m.cfg)
-	logger.Info("terminal: shell=%s, maxSlots=%d", m.shell, m.maxSlots)
+	m.shell, m.fallbackShells = discoverShell(m.cfg)
+	logger.Info("terminal: shell=%s, fallbacks=%v, maxSlots=%d", m.shell, m.fallbackShells, m.maxSlots)
 	return m
 }
 
@@ -52,16 +54,20 @@ func (m *TerminalManager) Create(cwd string, rows, cols uint16) (*Session, error
 	defer m.mu.Unlock()
 
 	if len(m.sessions) >= m.maxSlots {
-		return nil, fmt.Errorf("terminal: max sessions (%d) reached", m.maxSlots)
+		return nil, fmt.Errorf("terminal: max sessions (%d) reached: %w", m.maxSlots, ErrSessionLimit)
 	}
 
 	id := generateID()
-	s, err := newSession(id, m.shell, cwd, rows, cols)
+	s, shell, err := m.newSessionWithFallback(id, cwd, rows, cols)
 	if err != nil {
-		return nil, fmt.Errorf("terminal: create session: %w", err)
+		return nil, &SessionCreateError{Err: err}
 	}
 
 	m.sessions[id] = s
+	if shell != m.shell {
+		logger.Warn("terminal: falling back from %s to %s", m.shell, shell)
+		m.shell = shell
+	}
 	logger.Info("terminal: session created id=%s pid=%d", id, s.Pid)
 	return s, nil
 }
@@ -116,13 +122,17 @@ func (m *TerminalManager) Restart(id string, cwd string) (*Session, error) {
 
 	old.Close()
 
-	newS, err := newSession(id, m.shell, cwd, rows, cols)
+	newS, shell, err := m.newSessionWithFallback(id, cwd, rows, cols)
 	if err != nil {
 		delete(m.sessions, id)
 		return nil, fmt.Errorf("terminal: restart session: %w", err)
 	}
 
 	m.sessions[id] = newS
+	if shell != m.shell {
+		logger.Warn("terminal: falling back from %s to %s", m.shell, shell)
+		m.shell = shell
+	}
 	logger.Info("terminal: session restarted id=%s pid=%d", id, newS.Pid)
 	return newS, nil
 }
@@ -201,35 +211,82 @@ func newSession(id string, shell string, cwd string, rows, cols uint16) (*Sessio
 	return s, nil
 }
 
-func discoverShell(cfg *config.Config) string {
-	if cfg != nil && cfg.DefaultShell != "" {
-		return cfg.DefaultShell
+func (m *TerminalManager) newSessionWithFallback(id string, cwd string, rows, cols uint16) (*Session, string, error) {
+	candidates := make([]string, 0, 1+len(m.fallbackShells))
+	if m.shell != "" {
+		candidates = append(candidates, m.shell)
+	}
+	candidates = append(candidates, m.fallbackShells...)
+	logger.Info("terminal: create session candidates=%v cwd=%q rows=%d cols=%d", candidates, cwd, rows, cols)
+
+	var lastErr error
+	for i, shell := range candidates {
+		logger.Info("terminal: trying shell=%s", shell)
+		s, err := newSession(id, shell, cwd, rows, cols)
+		if err == nil {
+			if i > 0 {
+				m.fallbackShells = reorderFallbacks(candidates, shell)
+			}
+			logger.Info("terminal: shell=%s succeeded", shell)
+			return s, shell, nil
+		}
+		lastErr = err
+		logger.Warn("terminal: shell=%s failed: %v", shell, err)
+		if !IsPermissionError(err) {
+			return nil, shell, err
+		}
+		logger.Warn("terminal: shell %s failed with permission error, trying fallback", shell)
 	}
 
-	if sh := os.Getenv("CS_CLOUD_SHELL"); sh != "" {
-		return sh
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no terminal shell available")
 	}
-
-	if runtime.GOOS == "windows" {
-		return discoverWindowsShell()
-	}
-	return discoverUnixShell()
+	logger.Error("terminal: all shell candidates failed: %v", lastErr)
+	return nil, "", lastErr
 }
 
-func discoverUnixShell() string {
-	candidates := []string{os.Getenv("SHELL"), "/bin/zsh", "/bin/bash", "/bin/sh"}
+func discoverShell(cfg *config.Config) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return discoverWindowsShell(), nil
+	}
+	return discoverUnixShells(cfg)
+}
+
+func discoverUnixShells(cfg *config.Config) (string, []string) {
+	candidates := []string{}
+	if cfg != nil && cfg.DefaultShell != "" {
+		candidates = append(candidates, cfg.DefaultShell)
+	}
+	if sh := os.Getenv("CS_CLOUD_SHELL"); sh != "" {
+		candidates = append(candidates, sh)
+	}
+	candidates = append(candidates, os.Getenv("SHELL"), "/bin/zsh", "/bin/bash", "/bin/sh")
+
+	resolved := make([]string, 0, len(candidates))
 	for _, c := range candidates {
-		if c == "" {
+		p := resolveShellPath(c)
+		if p == "" {
 			continue
 		}
-		if _, err := exec.LookPath(c); err == nil {
-			return c
+		if containsString(resolved, p) {
+			continue
 		}
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
+		resolved = append(resolved, p)
 	}
-	return "/bin/sh"
+
+	validated := make([]string, 0, len(resolved))
+	for _, p := range resolved {
+		if verifyShellPty(p) {
+			validated = append(validated, p)
+			continue
+		}
+		logger.Warn("terminal: shell %s found but failed PTY verification", p)
+	}
+	if len(validated) == 0 {
+		logger.Warn("terminal: no shell passed PTY verification, falling back to /bin/sh")
+		return "/bin/sh", nil
+	}
+	return validated[0], validated[1:]
 }
 
 func discoverWindowsShell() string {
@@ -243,17 +300,46 @@ func discoverWindowsShell() string {
 	}
 	candidates = append(candidates, "powershell", os.Getenv("ComSpec"), "cmd")
 	for _, c := range candidates {
-		if c == "" {
+		p := resolveShellPath(c)
+		if p == "" {
 			continue
 		}
-		if _, err := exec.LookPath(c); err == nil {
-			return c
+		if verifyShell(p) {
+			return p
 		}
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
+		logger.Warn("terminal: shell %s found but failed trial run", p)
 	}
 	return "cmd.exe"
+}
+
+func resolveShellPath(c string) string {
+	if c == "" {
+		return ""
+	}
+	if p, err := exec.LookPath(c); err == nil {
+		return p
+	}
+	if _, err := os.Stat(c); err == nil {
+		return c
+	}
+	return ""
+}
+
+func verifyShell(path string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	base := strings.TrimSuffix(filepath.Base(path), ".exe")
+	var cmd *exec.Cmd
+	switch base {
+	case "cmd":
+		cmd = exec.CommandContext(ctx, path, "/c", "exit", "0")
+	case "pwsh", "powershell":
+		cmd = exec.CommandContext(ctx, path, "-Command", "exit", "0")
+	default:
+		cmd = exec.CommandContext(ctx, path, "-c", "true")
+	}
+	return cmd.Run() == nil
 }
 
 func findGitBash() string {
@@ -267,4 +353,23 @@ func findGitBash() string {
 		return bash
 	}
 	return ""
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func reorderFallbacks(candidates []string, selected string) []string {
+	ordered := make([]string, 0, len(candidates)-1)
+	for _, candidate := range candidates {
+		if candidate != selected {
+			ordered = append(ordered, candidate)
+		}
+	}
+	return ordered
 }
