@@ -42,16 +42,13 @@ func TestBuildManifest(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// should contain all shared, cloud-only, and prompt commands
+	// should contain all shared and prompt commands
 	sharedCount := 0
-	cloudCount := 0
 	promptCount := 0
 	for _, c := range manifest {
 		switch c.Scope {
 		case ScopeShared:
 			sharedCount++
-		case ScopeCloudOnly:
-			cloudCount++
 		case ScopePrompt:
 			promptCount++
 		}
@@ -59,9 +56,6 @@ func TestBuildManifest(t *testing.T) {
 
 	if sharedCount == 0 {
 		t.Error("expected shared commands in manifest")
-	}
-	if cloudCount == 0 {
-		t.Error("expected cloud-only commands in manifest")
 	}
 	if promptCount != len(agent) {
 		t.Errorf("expected %d prompt commands, got %d", len(agent), promptCount)
@@ -77,7 +71,7 @@ func TestBuildManifest(t *testing.T) {
 
 func TestBuildManifestDuplicateDetection(t *testing.T) {
 	agent := []SlashCommand{
-		{Name: "models", Description: "conflict with builtin"},
+		{Name: "favorites", Description: "conflict with builtin"},
 	}
 	_, err := BuildManifest([]string{ScopeShared, ScopePrompt}, agent)
 	if err == nil {
