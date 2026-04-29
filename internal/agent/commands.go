@@ -69,15 +69,15 @@ var BuiltinCommands = []SlashCommand{
 	{Name: "terminal", Title: "Toggle terminal", Description: "Show or hide the integrated terminal panel", Scope: ScopeCloudOnly, Category: "terminal", Keybind: "ctrl+`"},
 }
 
-// BuildManifest merges builtin UI commands with opencode prompt commands,
+// BuildManifest merges builtin UI commands with agent prompt commands,
 // then filters by the requested scopes.
-func BuildManifest(includeScopes []string, opencodeCmds []SlashCommand) ([]SlashCommand, error) {
+func BuildManifest(includeScopes []string, agentCmds []SlashCommand) ([]SlashCommand, error) {
 	scopeSet := make(map[string]struct{})
 	for _, s := range includeScopes {
 		scopeSet[s] = struct{}{}
 	}
 
-	result := make([]SlashCommand, 0, len(BuiltinCommands)+len(opencodeCmds))
+	result := make([]SlashCommand, 0, len(BuiltinCommands)+len(agentCmds))
 
 	for _, c := range BuiltinCommands {
 		if _, ok := scopeSet[c.Scope]; ok {
@@ -85,8 +85,8 @@ func BuildManifest(includeScopes []string, opencodeCmds []SlashCommand) ([]Slash
 		}
 	}
 
-	for _, c := range opencodeCmds {
-		// opencode commands are always prompt scope
+	for _, c := range agentCmds {
+		// agent commands are always prompt scope
 		if _, ok := scopeSet[ScopePrompt]; !ok {
 			continue
 		}
