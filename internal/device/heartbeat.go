@@ -1,0 +1,97 @@
+package device
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"cs-cloud/internal/config"
+	"cs-cloud/internal/logger"
+	"cs-cloud/internal/platform"
+	"cs-cloud/internal/version"
+)
+
+type HeartbeatResponse struct {
+	PendingCommands []CloudCommand `json:"pending_commands,omitempty"`
+}
+
+type CloudCommand struct {
+	CommandID string          `json:"command_id"`
+	Type      string          `json:"type"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	Timestamp string          `json:"timestamp,omitempty"`
+}
+
+func (c *Client) HeartbeatWithResponse(ctx context.Context) (*HeartbeatResponse, error) {
+	dev, err := LoadDevice()
+	if err != nil || dev == nil {
+		return nil, err
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	body, _ := json.Marshal(map[string]any{
+		"deviceID": dev.DeviceID,
+		"version":  version.Get(),
+	})
+
+	url := GetCloudAPIURL(c.cfg, "/api/devices/"+dev.DeviceID+"/heartbeat", dev.BaseURL)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+dev.DeviceToken)
+
+	resp, err := platform.HTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("heartbeat failed: %d %s", resp.StatusCode, string(respBody))
+	}
+
+	var hbResp HeartbeatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&hbResp); err != nil {
+		return nil, err
+	}
+	return &hbResp, nil
+}
+
+func HeartbeatLoop(ctx context.Context, cfg *config.Config, onCommands func([]CloudCommand)) {
+	client := NewClient(cfg)
+	interval := 5 * time.Minute
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	if resp, err := client.HeartbeatWithResponse(ctx); err != nil {
+		logger.Warn("[heartbeat] initial failed: %v", err)
+	} else if onCommands != nil && len(resp.PendingCommands) > 0 {
+		onCommands(resp.PendingCommands)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			resp, err := client.HeartbeatWithResponse(ctx)
+			if err != nil {
+				logger.Warn("[heartbeat] failed: %v", err)
+				continue
+			}
+			if onCommands != nil && len(resp.PendingCommands) > 0 {
+				onCommands(resp.PendingCommands)
+			}
+		}
+	}
+}

@@ -28,6 +28,12 @@ const (
 func Connect(ctx context.Context, localPort int) error {
 	attempt := 0
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		dev, err := device.LoadDevice()
 		if err != nil || dev == nil {
 			return fmt.Errorf("device not registered, cannot connect tunnel")
@@ -38,7 +44,12 @@ func Connect(ctx context.Context, localPort int) error {
 			logger.Warn("[tunnel] gateway-assign failed: %v, retrying...", err)
 			delay := backoff(attempt)
 			attempt++
-			time.Sleep(delay)
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
 			continue
 		}
 
@@ -49,7 +60,12 @@ func Connect(ctx context.Context, localPort int) error {
 
 		logger.Info("[tunnel] session ended, reconnecting...")
 		attempt = 0
-		time.Sleep(initialDelay)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(initialDelay):
+		}
 	}
 }
 

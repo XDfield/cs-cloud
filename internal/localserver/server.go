@@ -31,6 +31,8 @@ type Server struct {
 	findFilesMu     sync.Mutex
 	findFilesCache  map[string]*fileSearchIndex
 	findFilesBuilds map[string]*fileSearchBuild
+
+	dispatcher *CommandDispatcher
 }
 
 func New(opts ...Option) *Server {
@@ -113,6 +115,9 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("POST /terminal/{id}/input", s.termH.HandleInput)
 	api.HandleFunc("GET /terminal/input-ws", s.inputWsH.ServeHTTP)
 
+	api.HandleFunc("POST /commands", s.handleCommandDispatch)
+	api.HandleFunc("GET /commands/status", s.handleCommandStatus)
+
 	s.http = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -178,4 +183,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) TerminalManager() *terminal.TerminalManager {
 	return s.termMgr
+}
+
+func (s *Server) SetDispatcher(d *CommandDispatcher) {
+	s.dispatcher = d
+}
+
+func (s *Server) Dispatcher() *CommandDispatcher {
+	return s.dispatcher
 }
