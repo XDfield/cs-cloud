@@ -19,6 +19,7 @@ type Driver interface {
 	HealthCheck(ctx context.Context, backend string) (*HealthResult, error)
 	ProxyRoutes() []ProxyRoute
 	HeaderMap() map[string]string
+	FetchCommands(endpoint string) ([]SlashCommand, error)
 }
 
 type DetectedAgent struct {

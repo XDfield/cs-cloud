@@ -73,7 +73,7 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /agents/health", s.handleAgentHealth)
 	api.HandleFunc("GET /agents/models", s.handleProxy)
 	api.HandleFunc("GET /agents/session-modes", s.handleProxy)
-	api.HandleFunc("GET /agents/commands", s.handleProxy)
+	api.HandleFunc("GET /agents/commands", s.handleCommands)
 	api.HandleFunc("GET /agents/mcp", s.handleProxy)
 	api.HandleFunc("GET /agents/lsp", s.handleProxy)
 
@@ -93,6 +93,10 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("POST /conversations/{id}/command", s.handleProxy)
 
 	api.HandleFunc("GET /events", s.handleProxy)
+
+	api.HandleFunc("GET /global/favorite/skills", s.handleProxy)
+	api.HandleFunc("POST /global/favorite/skills/{id}/load", s.handleProxy)
+	api.HandleFunc("POST /global/favorite/skills/{id}/unload", s.handleProxy)
 
 	api.HandleFunc("GET /permissions", s.handleProxy)
 	api.HandleFunc("POST /permissions/{id}/reply", s.handleProxy)
