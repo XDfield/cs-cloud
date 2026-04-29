@@ -93,9 +93,9 @@ func (d *Driver) ProxyRoutes() []agent.ProxyRoute {
 		{Method: http.MethodPost, Prefix: "/questions/{id}/reply", Rewrite: agent.RewriteQuestionAction("/reply")},
 		{Method: http.MethodPost, Prefix: "/questions/{id}/reject", Rewrite: agent.RewriteQuestionAction("/reject")},
 		{Method: http.MethodGet, Prefix: "/events", Rewrite: agent.RewriteTo("/event")},
-		{Method: http.MethodGet, Prefix: "/global/favorite/skills", Rewrite: agent.RewriteTo("/global/favorite/skills")},
-		{Method: http.MethodPost, Prefix: "/global/favorite/skills/{id}/load", Rewrite: agent.RewriteSessionIDWithSuffix("/global/favorite/skills/", "/load")},
-		{Method: http.MethodPost, Prefix: "/global/favorite/skills/{id}/unload", Rewrite: agent.RewriteSessionIDWithSuffix("/global/favorite/skills/", "/unload")},
+		{Method: http.MethodGet, Prefix: "/agents/favorites", Rewrite: agent.RewriteTo("/global/favorite/skills")},
+		{Method: http.MethodPost, Prefix: "/agents/favorites/{id}/load", Rewrite: agent.RewriteSessionIDWithSuffix("/global/favorite/skills/", "/load")},
+		{Method: http.MethodPost, Prefix: "/agents/favorites/{id}/unload", Rewrite: agent.RewriteSessionIDWithSuffix("/global/favorite/skills/", "/unload")},
 		{Method: http.MethodGet, Prefix: "/agents/models", Rewrite: agent.RewriteTo("/provider/capabilities")},
 		{Method: http.MethodGet, Prefix: "/agents/session-modes", Rewrite: agent.RewriteTo("/agent")},
 		// /agents/commands is now handled by localserver.handleCommands (merged manifest with scope filtering)
