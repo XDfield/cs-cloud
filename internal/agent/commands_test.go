@@ -1,4 +1,4 @@
-package localserver
+package agent
 
 import (
 	"slices"
@@ -31,7 +31,7 @@ func TestBuiltinCommandsHaveValidScope(t *testing.T) {
 }
 
 func TestBuildManifest(t *testing.T) {
-	opencode := []Command{
+	opencode := []SlashCommand{
 		{Name: "init", Description: "Initialize", Source: "command"},
 		{Name: "review", Description: "Review", Source: "command"},
 	}
@@ -76,7 +76,7 @@ func TestBuildManifest(t *testing.T) {
 }
 
 func TestBuildManifestDuplicateDetection(t *testing.T) {
-	opencode := []Command{
+	opencode := []SlashCommand{
 		{Name: "models", Description: "conflict with builtin"},
 	}
 	_, err := BuildManifest([]string{ScopeShared, ScopePrompt}, opencode)
@@ -108,7 +108,7 @@ func TestParseIncludeScopes(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := parseIncludeScopes(tc.input)
+		got := ParseIncludeScopes(tc.input)
 		if len(got) != len(tc.expected) {
 			t.Fatalf("parseIncludeScopes(%q): expected %v, got %v", tc.input, tc.expected, got)
 		}

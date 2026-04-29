@@ -1,12 +1,12 @@
-package localserver
+package agent
 
 import (
 	"fmt"
 	"strings"
 )
 
-// Command represents a slash command that can be exposed to cloud UI or TUI.
-type Command struct {
+// SlashCommand represents a slash command that can be exposed to cloud UI or TUI.
+type SlashCommand struct {
 	Name        string   `json:"name"`
 	Aliases     []string `json:"aliases,omitempty"`
 	Title       string   `json:"title,omitempty"`
@@ -31,7 +31,7 @@ const (
 // BuiltinCommands is the source-of-truth list for TUI/Web UI commands.
 // These are maintained in cs-cloud and merged with opencode prompt commands
 // at runtime via BuildManifest.
-var BuiltinCommands = []Command{
+var BuiltinCommands = []SlashCommand{
 	// shared — available in both cloud UI and TUI
 	{Name: "new", Aliases: []string{"clear"}, Title: "New session", Description: "Start a new session", Scope: ScopeShared, Category: "session", Keybind: "mod+shift+s"},
 	{Name: "sessions", Aliases: []string{"resume", "continue"}, Title: "Switch session", Description: "Switch to another session", Scope: ScopeShared, Category: "session"},
@@ -71,13 +71,13 @@ var BuiltinCommands = []Command{
 
 // BuildManifest merges builtin UI commands with opencode prompt commands,
 // then filters by the requested scopes.
-func BuildManifest(includeScopes []string, opencodeCmds []Command) ([]Command, error) {
+func BuildManifest(includeScopes []string, opencodeCmds []SlashCommand) ([]SlashCommand, error) {
 	scopeSet := make(map[string]struct{})
 	for _, s := range includeScopes {
 		scopeSet[s] = struct{}{}
 	}
 
-	result := make([]Command, 0, len(BuiltinCommands)+len(opencodeCmds))
+	result := make([]SlashCommand, 0, len(BuiltinCommands)+len(opencodeCmds))
 
 	for _, c := range BuiltinCommands {
 		if _, ok := scopeSet[c.Scope]; ok {
@@ -113,9 +113,9 @@ func BuildManifest(includeScopes []string, opencodeCmds []Command) ([]Command, e
 	return result, nil
 }
 
-// parseIncludeScopes parses the ?include= query parameter.
+// ParseIncludeScopes parses the ?include= query parameter.
 // Defaults to [shared, prompt, cloud-only] when empty.
-func parseIncludeScopes(q string) []string {
+func ParseIncludeScopes(q string) []string {
 	if q == "" {
 		return []string{ScopeShared, ScopePrompt, ScopeCloudOnly}
 	}
