@@ -31,27 +31,24 @@ func TestBuiltinCommandsHaveValidScope(t *testing.T) {
 }
 
 func TestBuildManifest(t *testing.T) {
-	opencode := []SlashCommand{
+	agent := []SlashCommand{
 		{Name: "init", Description: "Initialize", Source: "command"},
 		{Name: "review", Description: "Review", Source: "command"},
 	}
 
 	// shared + prompt + cloud-only (default)
-	manifest, err := BuildManifest([]string{ScopeShared, ScopePrompt, ScopeCloudOnly}, opencode)
+	manifest, err := BuildManifest([]string{ScopeShared, ScopePrompt, ScopeCloudOnly}, agent)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// should contain all shared, cloud-only, and prompt commands
+	// should contain all shared and prompt commands
 	sharedCount := 0
-	cloudCount := 0
 	promptCount := 0
 	for _, c := range manifest {
 		switch c.Scope {
 		case ScopeShared:
 			sharedCount++
-		case ScopeCloudOnly:
-			cloudCount++
 		case ScopePrompt:
 			promptCount++
 		}
@@ -60,11 +57,8 @@ func TestBuildManifest(t *testing.T) {
 	if sharedCount == 0 {
 		t.Error("expected shared commands in manifest")
 	}
-	if cloudCount == 0 {
-		t.Error("expected cloud-only commands in manifest")
-	}
-	if promptCount != len(opencode) {
-		t.Errorf("expected %d prompt commands, got %d", len(opencode), promptCount)
+	if promptCount != len(agent) {
+		t.Errorf("expected %d prompt commands, got %d", len(agent), promptCount)
 	}
 
 	// tui-only should NOT be included
@@ -76,16 +70,16 @@ func TestBuildManifest(t *testing.T) {
 }
 
 func TestBuildManifestDuplicateDetection(t *testing.T) {
-	opencode := []SlashCommand{
-		{Name: "models", Description: "conflict with builtin"},
+	agent := []SlashCommand{
+		{Name: "favorites", Description: "conflict with builtin"},
 	}
-	_, err := BuildManifest([]string{ScopeShared, ScopePrompt}, opencode)
+	_, err := BuildManifest([]string{ScopeShared, ScopePrompt}, agent)
 	if err == nil {
 		t.Fatal("expected error for duplicate command name")
 	}
 }
 
-func TestBuildManifestEmptyOpencode(t *testing.T) {
+func TestBuildManifestEmptyAgent(t *testing.T) {
 	manifest, err := BuildManifest([]string{ScopeShared}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -94,9 +94,9 @@ func New(opts ...Option) *Server {
 
 	api.HandleFunc("GET /events", s.handleProxy)
 
-	api.HandleFunc("GET /global/favorite/skills", s.handleProxy)
-	api.HandleFunc("POST /global/favorite/skills/{id}/load", s.handleProxy)
-	api.HandleFunc("POST /global/favorite/skills/{id}/unload", s.handleProxy)
+	api.HandleFunc("GET /agents/favorites", s.handleFavoriteList)
+	api.HandleFunc("POST /agents/favorites/{id}/load", s.handleFavoriteLoad)
+	api.HandleFunc("POST /agents/favorites/{id}/unload", s.handleFavoriteUnload)
 
 	api.HandleFunc("GET /permissions", s.handleProxy)
 	api.HandleFunc("POST /permissions/{id}/reply", s.handleProxy)

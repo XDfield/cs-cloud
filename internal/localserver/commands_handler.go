@@ -10,7 +10,7 @@ import (
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 	scopes := agent.ParseIncludeScopes(r.URL.Query().Get("include"))
 
-	var opencodeCmds []agent.SlashCommand
+	var agentCmds []agent.SlashCommand
 
 	endpoint := s.manager.Endpoint()
 	if endpoint != "" {
@@ -21,16 +21,16 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 		} else {
 			cmds, err := d.FetchCommands(endpoint)
 			if err != nil {
-				logger.Warn("failed to fetch opencode commands, falling back to builtin only: %v", err)
+				logger.Warn("failed to fetch agent commands, falling back to builtin only: %v", err)
 			} else {
-				opencodeCmds = cmds
+				agentCmds = cmds
 			}
 		}
 	} else {
 		logger.Warn("no agent endpoint available, returning builtin commands only")
 	}
 
-	manifest, err := agent.BuildManifest(scopes, opencodeCmds)
+	manifest, err := agent.BuildManifest(scopes, agentCmds)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 		return

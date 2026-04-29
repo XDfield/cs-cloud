@@ -32,52 +32,18 @@ const (
 // These are maintained in cs-cloud and merged with opencode prompt commands
 // at runtime via BuildManifest.
 var BuiltinCommands = []SlashCommand{
-	// shared — available in both cloud UI and TUI
-	{Name: "new", Aliases: []string{"clear"}, Title: "New session", Description: "Start a new session", Scope: ScopeShared, Category: "session", Keybind: "mod+shift+s"},
-	{Name: "sessions", Aliases: []string{"resume", "continue"}, Title: "Switch session", Description: "Switch to another session", Scope: ScopeShared, Category: "session"},
-	{Name: "workspaces", Title: "Manage workspaces", Description: "Manage or switch workspaces", Scope: ScopeShared, Category: "workspace"},
-	{Name: "models", Title: "Switch model", Description: "Choose model for this session", Scope: ScopeShared, Category: "model", Keybind: "mod+'"},
-	{Name: "agents", Title: "Switch agent", Description: "Cycle through available agents", Scope: ScopeShared, Category: "agent", Keybind: "mod+."},
-	{Name: "mcps", Title: "Toggle MCPs", Description: "Enable or disable MCP servers", Scope: ScopeShared, Category: "mcp", Keybind: "mod+;"},
-	{Name: "variants", Title: "Switch variant", Description: "Switch model variant", Scope: ScopeShared, Category: "model", Keybind: "shift+mod+d"},
-	{Name: "connect", Title: "Connect provider", Description: "Connect to an AI provider", Scope: ScopeShared, Category: "provider"},
-	{Name: "status", Title: "View status", Description: "View agent and provider status", Scope: ScopeShared, Category: "provider"},
-	{Name: "credit", Title: "View credit", Description: "View usage and credit balance", Scope: ScopeShared, Category: "provider"},
-	{Name: "themes", Title: "Switch theme", Description: "Change the UI theme", Scope: ScopeShared, Category: "ui"},
-	{Name: "help", Title: "Help", Description: "Show keyboard shortcuts and commands", Scope: ScopeShared, Category: "ui"},
 	{Name: "favorites", Aliases: []string{"fav"}, Title: "Manage favorites", Description: "Manage favorite skills", Scope: ScopeShared, Category: "skill"},
-	{Name: "skills", Title: "Skills picker", Description: "Browse and select skills", Scope: ScopeShared, Category: "skill"},
-	{Name: "share", Title: "Share session", Description: "Generate a shareable link for this session", Scope: ScopeShared, Category: "session", Keybind: "session_share"},
-	{Name: "unshare", Title: "Unshare session", Description: "Revoke the share link for this session", Scope: ScopeShared, Category: "session", Keybind: "session_unshare"},
-	{Name: "rename", Title: "Rename session", Description: "Rename the current session", Scope: ScopeShared, Category: "session", Keybind: "session_rename"},
-	{Name: "timeline", Title: "Jump to message", Description: "Jump to a specific message in the timeline", Scope: ScopeShared, Category: "session", Keybind: "session_timeline"},
-	{Name: "fork", Title: "Fork session", Description: "Fork the session from a message", Scope: ScopeShared, Category: "session", Keybind: "session_fork"},
-	{Name: "compact", Aliases: []string{"summarize"}, Title: "Compact session", Description: "Summarize and compact the session history", Scope: ScopeShared, Category: "session", Keybind: "session_compact"},
-	{Name: "undo", Title: "Undo", Description: "Undo the last message", Scope: ScopeShared, Category: "session"},
-	{Name: "redo", Title: "Redo", Description: "Redo the previously undone message", Scope: ScopeShared, Category: "session"},
-	{Name: "copy", Title: "Copy transcript", Description: "Copy session transcript to clipboard", Scope: ScopeShared, Category: "session"},
-	{Name: "export", Title: "Export transcript", Description: "Export session transcript as markdown", Scope: ScopeShared, Category: "session"},
-	{Name: "timestamps", Aliases: []string{"toggle-timestamps"}, Title: "Toggle timestamps", Description: "Show or hide message timestamps", Scope: ScopeShared, Category: "ui"},
-	{Name: "thinking", Aliases: []string{"toggle-thinking"}, Title: "Toggle thinking", Description: "Show or hide thinking process", Scope: ScopeShared, Category: "ui"},
-
-	// tui-only — not available in cloud UI
-	{Name: "exit", Aliases: []string{"quit", "q"}, Title: "Exit", Description: "Exit the TUI application", Scope: ScopeTuiOnly, Category: "ui"},
-	{Name: "editor", Title: "Open editor", Description: "Open the default external editor", Scope: ScopeTuiOnly, Category: "ui"},
-
-	// cloud-only — not available in TUI
-	{Name: "open", Title: "Open file", Description: "Open a file dialog", Scope: ScopeCloudOnly, Category: "file", Keybind: "mod+p"},
-	{Name: "terminal", Title: "Toggle terminal", Description: "Show or hide the integrated terminal panel", Scope: ScopeCloudOnly, Category: "terminal", Keybind: "ctrl+`"},
 }
 
-// BuildManifest merges builtin UI commands with opencode prompt commands,
+// BuildManifest merges builtin UI commands with agent prompt commands,
 // then filters by the requested scopes.
-func BuildManifest(includeScopes []string, opencodeCmds []SlashCommand) ([]SlashCommand, error) {
+func BuildManifest(includeScopes []string, agentCmds []SlashCommand) ([]SlashCommand, error) {
 	scopeSet := make(map[string]struct{})
 	for _, s := range includeScopes {
 		scopeSet[s] = struct{}{}
 	}
 
-	result := make([]SlashCommand, 0, len(BuiltinCommands)+len(opencodeCmds))
+	result := make([]SlashCommand, 0, len(BuiltinCommands)+len(agentCmds))
 
 	for _, c := range BuiltinCommands {
 		if _, ok := scopeSet[c.Scope]; ok {
@@ -85,8 +51,8 @@ func BuildManifest(includeScopes []string, opencodeCmds []SlashCommand) ([]Slash
 		}
 	}
 
-	for _, c := range opencodeCmds {
-		// opencode commands are always prompt scope
+	for _, c := range agentCmds {
+		// agent commands are always prompt scope
 		if _, ok := scopeSet[ScopePrompt]; !ok {
 			continue
 		}
