@@ -36,6 +36,7 @@ func start(a *app.App) error {
 	if mode == "cloud" {
 		info, err := registerWithLogin(ctx, a)
 		if err != nil {
+			printRegDebugInfo(a)
 			return err
 		}
 		printSuccess("Device registered")
@@ -47,14 +48,17 @@ func start(a *app.App) error {
 			_ = device.ClearDevice()
 			info, err = registerWithLogin(ctx, a)
 			if err != nil {
+				printRegDebugInfo(a)
 				return err
 			}
 			printWarn("Device re-registered")
 			printKV("device_id", info.DeviceID)
 				if err := device.ValidateDeviceToken(ctx, info); err != nil {
+					printRegDebugInfo(a)
 					return err
 				}
 			} else {
+				printRegDebugInfo(a)
 				return err
 			}
 		}
@@ -188,4 +192,14 @@ func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, err
 		}
 	}
 	return info, nil
+}
+
+func printRegDebugInfo(a *app.App) {
+	printSection("Debug info")
+	printKV("cloud_url", a.CloudBaseURL())
+	if devInfo, _ := a.Device(); devInfo != nil {
+		printKV("device_id", devInfo.DeviceID)
+	} else {
+		printKV("device_id", provider.GenerateMachineID())
+	}
 }

@@ -30,6 +30,8 @@ func status(a *app.App) error {
 	deviceIDVal := ""
 	if dev != nil {
 		deviceIDVal = dev.DeviceID
+	} else {
+		deviceIDVal = provider.GenerateMachineID()
 	}
 
 	if running {
