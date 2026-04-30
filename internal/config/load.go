@@ -28,6 +28,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	if env := platform.Getenv("CS_CLOUD_AUTO_UPGRADE"); env != "" {
+		cfg.AutoUpgrade = env == "true" || env == "1" || env == "yes"
+	}
+	if platform.NoAutoUpgrade() {
+		cfg.AutoUpgrade = false
+	}
+
 	if p, err := configFilePath(); err == nil {
 		if b, err := os.ReadFile(p); err == nil {
 			var fileCfg Config

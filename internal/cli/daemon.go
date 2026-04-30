@@ -169,7 +169,7 @@ func runDaemon(a *app.App) error {
 		return err
 	}
 
-	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
+	logger.Info("daemon started (version: %s, mode: %s, port: %d, auto_upgrade: %v)", version.FullString(), mode, srv.Port(), a.Config().AutoUpgrade)
 	logger.Info("swagger docs: %s/api/v1/docs", srv.URL())
 	recent, err := a.LoadRecentWorkspaces()
 	if err != nil {
@@ -218,6 +218,7 @@ func runDaemon(a *app.App) error {
 		updaterMgr := updater.NewManager(
 			a.CloudBaseURL(), a.RootDir(),
 			updater.WithPolicy(updater.PolicyAuto),
+			updater.WithAutoCheck(a.Config().AutoUpgrade),
 		)
 		dispatcher.BindUpdater(updaterMgr)
 		go updaterMgr.Run(cloudCtx)

@@ -79,8 +79,8 @@ func (d *CommandDispatcher) Dispatch(ctx context.Context, req *commandRequest) (
 	}
 
 	for _, entry := range d.active {
-		if entry.status == "executing" {
-			return nil, fmt.Errorf("command %s is already executing", entry.req.CommandID)
+		if entry.status == "executing" || entry.status == "accepted" {
+			return nil, fmt.Errorf("command %s is already %s", entry.req.CommandID, entry.status)
 		}
 	}
 

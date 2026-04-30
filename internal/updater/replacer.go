@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"cs-cloud/internal/logger"
 )
 
 type UpgradeState struct {
@@ -36,6 +38,7 @@ func (r *Replacer) Replace(currentExe, newBinary, currentVersion, newVersion str
 		os.Remove(backupPath)
 	}
 
+	logger.Info("[replacer] backing up current binary: %s -> %s", currentExe, backupPath)
 	if err := copyFile(currentExe, backupPath); err != nil {
 		return fmt.Errorf("backup current binary: %w", err)
 	}
@@ -58,9 +61,11 @@ func (r *Replacer) Replace(currentExe, newBinary, currentVersion, newVersion str
 }
 
 func (r *Replacer) replaceUnix(currentExe, newBinary string) error {
+	logger.Info("[replacer] unix: renaming %s -> %s", newBinary, currentExe)
 	if err := os.Rename(newBinary, currentExe); err != nil {
 		return fmt.Errorf("replace binary: %w", err)
 	}
+	logger.Info("[replacer] binary replaced successfully")
 	return nil
 }
 
@@ -69,6 +74,7 @@ func (r *Replacer) replaceWindows(currentExe, newBinary string) error {
 	if _, err := os.Stat(newPath); err == nil {
 		os.Remove(newPath)
 	}
+	logger.Info("[replacer] windows: staging new binary -> %s", newPath)
 	if err := os.Rename(newBinary, newPath); err != nil {
 		return fmt.Errorf("stage new binary: %w", err)
 	}
@@ -77,9 +83,11 @@ func (r *Replacer) replaceWindows(currentExe, newBinary string) error {
 	if _, err := os.Stat(oldPath); err == nil {
 		os.Remove(oldPath)
 	}
+	logger.Info("[replacer] windows: renaming current -> %s", oldPath)
 	if err := os.Rename(currentExe, oldPath); err != nil {
 		return fmt.Errorf("rename current to old: %w", err)
 	}
+	logger.Info("[replacer] windows: activating new binary")
 	if err := os.Rename(newPath, currentExe); err != nil {
 		rerr := os.Rename(oldPath, currentExe)
 		if rerr != nil {
@@ -88,6 +96,7 @@ func (r *Replacer) replaceWindows(currentExe, newBinary string) error {
 		return fmt.Errorf("replace binary: %w", err)
 	}
 
+	logger.Info("[replacer] binary replaced successfully")
 	return nil
 }
 

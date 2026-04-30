@@ -88,6 +88,9 @@ func start(a *app.App) error {
 	if d := platform.DataDir(); d != "" {
 		daemonArgs = append(daemonArgs, "--data-dir", d)
 	}
+	if platform.NoAutoUpgrade() {
+		daemonArgs = append(daemonArgs, "--no-auto-upgrade")
+	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)
 	cmd.Stdin = nullFd

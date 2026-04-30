@@ -76,12 +76,10 @@ func (d *Downloader) Download(ctx context.Context, url, expectedSHA256 string) (
 	w := io.MultiWriter(tmpFile, hasher)
 
 	if contentLength > 0 {
-		p := newDownloadProgress(contentLength)
-		if _, err := io.Copy(w, &progressWriter{w: resp.Body, p: p, total: contentLength}); err != nil {
-			p.quit()
+		pw := &loggingProgressWriter{src: resp.Body, total: contentLength}
+		if _, err := io.CopyBuffer(w, pw, make([]byte, 32*1024)); err != nil {
 			return "", fmt.Errorf("write download: %w", err)
 		}
-		p.finish()
 	} else {
 		if _, err := io.Copy(w, resp.Body); err != nil {
 			return "", fmt.Errorf("write download: %w", err)
@@ -290,6 +288,25 @@ func (d *Downloader) extractFromZip(archivePath string) (string, error) {
 	}
 
 	return "", fmt.Errorf("cs-cloud binary not found in zip archive")
+}
+
+type loggingProgressWriter struct {
+	src      io.Reader
+	total    int64
+	wrote    int64
+	lastLog  time.Time
+}
+
+func (pw *loggingProgressWriter) Read(b []byte) (int, error) {
+	n, err := pw.src.Read(b)
+	pw.wrote += int64(n)
+	now := time.Now()
+	if pw.wrote == pw.total || now.Sub(pw.lastLog) >= 5*time.Second {
+		pw.lastLog = now
+		pct := float64(pw.wrote) * 100 / float64(pw.total)
+		logger.Info("download progress: %.1f%% (%d/%d bytes)", pct, pw.wrote, pw.total)
+	}
+	return n, err
 }
 
 type progressWriter struct {

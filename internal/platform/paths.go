@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	mu       sync.RWMutex
-	authPath string
-	dataDir  string
+	mu             sync.RWMutex
+	authPath       string
+	dataDir        string
+	noAutoUpgrade  bool
 )
 
 func SetAuthPath(p string) {
@@ -46,6 +47,18 @@ func DataDir() string {
 	mu.RLock()
 	defer mu.RUnlock()
 	return dataDir
+}
+
+func SetNoAutoUpgrade(v bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	noAutoUpgrade = v
+}
+
+func NoAutoUpgrade() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return noAutoUpgrade
 }
 
 func AppDir() string {
