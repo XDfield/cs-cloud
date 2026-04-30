@@ -22,6 +22,13 @@ func login(a *app.App) error {
 
 	printTitle("cs-cloud login")
 	printSuccess("Login successful")
+	if claims, err := provider.ParseJWT(cred.AccessToken); err == nil {
+		user := claims.ResolveDisplayName()
+		p := claims.ResolveProvider()
+		if p != "" || user != "" {
+			printKV("user", p+"/"+user)
+		}
+	}
 	printKV("machine_id", cred.MachineID)
 	printKV("base_url", cred.BaseURL)
 
@@ -31,15 +38,29 @@ func login(a *app.App) error {
 			printWarn("Authentication issue, please try login again")
 			return err
 		}
-		printWarn("Device registration failed: %v", err)
-		if u := device.GetRegistrationURL(err); u != "" {
-			printKV("register_url", u)
+		printWarn("Device registration failed, retrying...")
+		_ = device.ClearDevice()
+		info, err = device.Register(ctx, a.Config())
+		if err != nil {
+			printRegDebugInfo(a)
+			return err
 		}
-		printKV("device_id", cred.MachineID)
-		return nil
 	}
 	printSuccess("Device registered")
 	printKV("device_id", info.DeviceID)
+
+	if running, _ := a.DaemonStatus(); running {
+		printInfo("Restarting daemon with new credentials...")
+		return restart(a)
+	}
+
+	fmt.Println()
+	fmt.Print(headingStyle.Render("Start cs-cloud now?") + " [Y/n] ")
+	var answer string
+	fmt.Scanln(&answer)
+	if answer == "" || answer == "y" || answer == "Y" {
+		return start(a)
+	}
 	return nil
 }
 

@@ -4,12 +4,138 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
 type JWTPayload struct {
-	Exp int64 `json:"exp,omitempty"`
-	Iat int64 `json:"iat,omitempty"`
+	Exp               int64          `json:"exp,omitempty"`
+	Iat               int64          `json:"iat,omitempty"`
+	Sub               string         `json:"sub,omitempty"`
+	Name              string         `json:"name,omitempty"`
+	PreferredUsername string         `json:"preferred_username,omitempty"`
+	DisplayName       string         `json:"displayName,omitempty"`
+	Provider          string         `json:"provider,omitempty"`
+	Owner             string         `json:"owner,omitempty"`
+	Email             string         `json:"email,omitempty"`
+	Phone             string         `json:"phone,omitempty"`
+	PhoneNumber       string         `json:"phone_number,omitempty"`
+	UniversalID       string         `json:"universal_id,omitempty"`
+	Properties        map[string]any `json:"properties,omitempty"`
+}
+
+func (p *JWTPayload) UserID() string {
+	if p.UniversalID != "" {
+		return p.UniversalID
+	}
+	return p.Sub
+}
+
+func (p *JWTPayload) ResolveProvider() string {
+	if p.Provider != "" {
+		return strings.ToLower(strings.TrimSpace(p.Provider))
+	}
+	phone := firstNonEmptyStr(p.PhoneNumber, p.Phone)
+	if phone != "" {
+		return "phone"
+	}
+	if p.Properties != nil {
+		for k := range p.Properties {
+			kl := strings.ToLower(k)
+			if strings.HasPrefix(kl, "oauth_github") {
+				return "github"
+			}
+			if strings.HasPrefix(kl, "oauth_custom") {
+				return "idtrust"
+			}
+		}
+	}
+	if p.Email != "" && strings.Contains(p.Email, "@") {
+		return "email"
+	}
+	return ""
+}
+
+func (p *JWTPayload) ResolveDisplayName() string {
+	provider := p.ResolveProvider()
+	prefix := providerPropertyPrefix(provider)
+	providerDisplayName := ""
+	providerUsername := ""
+	if prefix != "" && p.Properties != nil {
+		if dn, ok := p.Properties[prefix+"_displayName"].(string); ok {
+			providerDisplayName = strings.TrimSpace(dn)
+		}
+		if un, ok := p.Properties[prefix+"_username"].(string); ok {
+			providerUsername = strings.TrimSpace(un)
+		}
+	}
+
+	email := p.Email
+	if email != "" && !strings.Contains(email, "@") {
+		email = ""
+	}
+
+	name := p.Name
+	displayName := firstNonEmptyStr(providerDisplayName, p.PreferredUsername, p.DisplayName, name)
+	username := ""
+
+	switch provider {
+	case "github":
+		username = firstNonEmptyStr(providerUsername, name, usernameFromEmail(email))
+	case "idtrust":
+		username = firstNonEmptyStr(providerUsername)
+		displayName = firstNonEmptyStr(providerDisplayName, p.DisplayName, username)
+		name = username
+	case "phone":
+		phone := firstNonEmptyStr(p.PhoneNumber, p.Phone)
+		if phone != "" {
+			username = "phone_" + phone
+		}
+		displayName = firstNonEmptyStr(p.DisplayName, username)
+	default:
+		username = firstNonEmptyStr(providerUsername, p.PreferredUsername, name, usernameFromEmail(email))
+	}
+
+	if username == "" {
+		username = firstNonEmptyStr(p.UniversalID, p.Sub)
+		if username != "" {
+			if len(username) > 12 {
+				username = username[:12]
+			}
+			username = "user_" + strings.ToLower(username)
+		} else {
+			username = "user"
+		}
+	}
+	if name == "" || provider == "idtrust" {
+		name = username
+	}
+	if displayName == "" {
+		displayName = username
+	}
+	return displayName
+}
+
+func usernameFromEmail(email string) string {
+	if email == "" {
+		return ""
+	}
+	idx := strings.Index(email, "@")
+	if idx <= 0 {
+		return ""
+	}
+	return strings.TrimSpace(email[:idx])
+}
+
+func providerPropertyPrefix(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "github":
+		return "oauth_GitHub"
+	case "idtrust", "custom":
+		return "oauth_Custom"
+	default:
+		return ""
+	}
 }
 
 func ParseJWT(token string) (*JWTPayload, error) {
@@ -73,4 +199,13 @@ func splitToken(token string) []string {
 		parts = append(parts, token[start:])
 	}
 	return parts
+}
+
+func firstNonEmptyStr(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

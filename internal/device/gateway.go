@@ -10,8 +10,17 @@ import (
 	"time"
 
 	"cs-cloud/internal/platform"
+	"cs-cloud/internal/provider"
 	"cs-cloud/internal/version"
 )
+
+func setDeviceAuthHeaders(req *http.Request, device *DeviceInfo) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+device.DeviceToken)
+	if cred, err := provider.LoadCredentials(); err == nil && cred != nil && cred.AccessToken != "" {
+		req.Header.Set("X-User-Token", cred.AccessToken)
+	}
+}
 
 func ValidateDeviceToken(ctx context.Context, device *DeviceInfo) error {
 	reqBody := map[string]any{
@@ -28,8 +37,7 @@ func ValidateDeviceToken(ctx context.Context, device *DeviceInfo) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+device.DeviceToken)
+	setDeviceAuthHeaders(req, device)
 
 	resp, err := platform.HTTPClient().Do(req)
 	if err != nil {
@@ -63,8 +71,7 @@ func AssignGateway(ctx context.Context, device *DeviceInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+device.DeviceToken)
+	setDeviceAuthHeaders(req, device)
 
 	resp, err := platform.HTTPClient().Do(req)
 	if err != nil {

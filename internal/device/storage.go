@@ -13,6 +13,7 @@ import (
 type DeviceInfo struct {
 	DeviceID     string `json:"device_id"`
 	DeviceToken  string `json:"device_token"`
+	AuthUserID   string `json:"auth_user_id"`
 	RegisteredAt string `json:"registered_at"`
 	BaseURL      string `json:"base_url"`
 }

@@ -85,7 +85,7 @@ func TestRunManagedTunnelContextCancel(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		RunManagedTunnel(ctx, 0, m)
+		RunManagedTunnel(ctx, 0, m, nil)
 		close(done)
 	}()
 

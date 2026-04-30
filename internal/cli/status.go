@@ -42,6 +42,15 @@ func status(a *app.App) error {
 		printKV("root", a.RootDir())
 		printKV("cloud_url", a.CloudBaseURL())
 		printKV("auth", fmt.Sprintf("%t", cred != nil))
+		if cred != nil {
+			if claims, err := provider.ParseJWT(cred.AccessToken); err == nil {
+				user := claims.ResolveDisplayName()
+				p := claims.ResolveProvider()
+				if p != "" || user != "" {
+					printKV("user", p+"/"+user)
+				}
+			}
+		}
 		printKV("device", fmt.Sprintf("%t", dev != nil))
 		printKV("device_id", deviceIDVal)
 		p, h, u := provider.MachineIDParts()
@@ -63,6 +72,15 @@ func status(a *app.App) error {
 		printKV("root", a.RootDir())
 		printKV("cloud_url", a.CloudBaseURL())
 		printKV("auth", fmt.Sprintf("%t", cred != nil))
+		if cred != nil {
+			if claims, err := provider.ParseJWT(cred.AccessToken); err == nil {
+				user := claims.ResolveDisplayName()
+				p := claims.ResolveProvider()
+				if p != "" || user != "" {
+					printKV("user", p+"/"+user)
+				}
+			}
+		}
 		printKV("device", fmt.Sprintf("%t", dev != nil))
 		printKV("device_id", deviceIDVal)
 	}

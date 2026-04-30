@@ -70,12 +70,16 @@ func (c *Client) Register(ctx context.Context) (*DeviceInfo, error) {
 		return nil, err
 	}
 	if existing != nil {
-		resolved := GetCloudBaseURL(c.cfg, "")
-		if resolved != existing.BaseURL {
-			existing.BaseURL = resolved
-			_ = SaveDevice(existing)
+		if ownerErr := ValidateDeviceOwner(existing); ownerErr != nil {
+			_ = ClearDevice()
+		} else {
+			resolved := GetCloudBaseURL(c.cfg, "")
+			if resolved != existing.BaseURL {
+				existing.BaseURL = resolved
+				_ = SaveDevice(existing)
+			}
+			return existing, nil
 		}
-		return existing, nil
 	}
 
 	creds, err := auth(ctx)
@@ -127,8 +131,14 @@ func renew(ctx context.Context, creds *provider.Credentials) (*provider.Credenti
 		return nil, err
 	}
 	expiry := provider.ExtractExpiryFromJWT(result.AccessToken)
+	id := creds.ID
+	if claims, err := provider.ParseJWT(result.AccessToken); err == nil {
+		if uid := claims.UserID(); uid != "" {
+			id = uid
+		}
+	}
 	fresh := &provider.Credentials{
-		ID:           creds.ID,
+		ID:           id,
 		Name:         creds.Name,
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -172,7 +182,7 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 409 {
-		return handleConflict(resp, base)
+		return handleConflict(resp, base, creds.ID)
 	}
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -192,6 +202,7 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 	info := &DeviceInfo{
 		DeviceID:     out.Device.DeviceID,
 		DeviceToken:  out.Token,
+		AuthUserID:   creds.ID,
 		RegisteredAt: time.Now().Format(time.RFC3339),
 		BaseURL:      base,
 	}
@@ -201,7 +212,7 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 	return info, nil
 }
 
-func handleConflict(resp *http.Response, base string) (*DeviceInfo, error) {
+func handleConflict(resp *http.Response, base, authUserID string) (*DeviceInfo, error) {
 	var conflict conflictResponse
 	if err := json.NewDecoder(resp.Body).Decode(&conflict); err != nil {
 		return nil, fmt.Errorf("device already registered")
@@ -210,6 +221,7 @@ func handleConflict(resp *http.Response, base string) (*DeviceInfo, error) {
 		info := &DeviceInfo{
 			DeviceID:     conflict.Device.DeviceID,
 			DeviceToken:  conflict.Token,
+			AuthUserID:   authUserID,
 			RegisteredAt: time.Now().Format(time.RFC3339),
 			BaseURL:      base,
 		}
@@ -359,4 +371,24 @@ func ClearDevice() error {
 		return err
 	}
 	return nil
+}
+
+func ValidateDeviceOwner(info *DeviceInfo) error {
+	if info == nil || info.AuthUserID == "" {
+		return nil
+	}
+	cred, err := provider.LoadCredentials()
+	if err != nil || cred == nil {
+		return fmt.Errorf("auth user changed: no credentials found")
+	}
+	if cred.ID != info.AuthUserID {
+		return fmt.Errorf("auth user changed: device bound to %q but current user is %q", info.AuthUserID, cred.ID)
+	}
+	return nil
+}
+
+func ReRegister(ctx context.Context, cfg *config.Config) (*DeviceInfo, error) {
+	_ = ClearDevice()
+	c := NewClient(cfg)
+	return c.Register(ctx)
 }

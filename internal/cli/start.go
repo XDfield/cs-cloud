@@ -153,6 +153,15 @@ waitDone:
 	printSection("Developer info")
 	printKV("pid", fmt.Sprintf("%d", cmd.Process.Pid))
 	printKV("mode", mode)
+	if cred, _ := a.Credentials(); cred != nil {
+		if claims, err := provider.ParseJWT(cred.AccessToken); err == nil {
+			user := claims.ResolveDisplayName()
+			p := claims.ResolveProvider()
+			if p != "" || user != "" {
+				printKV("user", p+"/"+user)
+			}
+		}
+	}
 	// printKV("url", url)
 	printKV("docs", url+"/api/v1/docs")
 	printKV("swagger docs", url+"/api/v1/docs")
