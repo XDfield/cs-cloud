@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"cs-cloud/internal/app"
 	"cs-cloud/internal/provider"
@@ -33,26 +34,35 @@ func status(a *app.App) error {
 
 	if running {
 		printSuccess("Running")
-		fmt.Print(renderKV([][2]string{
-			{"pid", fmt.Sprintf("%d", pid)},
-			{"mode", mode},
-			{"root", a.RootDir()},
-			{"cloud_url", a.CloudBaseURL()},
-			{"auth", fmt.Sprintf("%t", cred != nil)},
-			{"device", fmt.Sprintf("%t", dev != nil)},
-			{"device_id", deviceIDVal},
-			{"local_url", serverURL},
-			{"logs", filepath.Join(a.RootDir(), "app.log")},
-		}))
+		printSection("Developer info")
+		printKV("pid", fmt.Sprintf("%d", pid))
+		printKV("mode", mode)
+		printKV("root", a.RootDir())
+		printKV("cloud_url", a.CloudBaseURL())
+		printKV("auth", fmt.Sprintf("%t", cred != nil))
+		printKV("device", fmt.Sprintf("%t", dev != nil))
+		printKV("device_id", deviceIDVal)
+		p, h, u := provider.MachineIDParts()
+		printKV("device_id.platform", p)
+		printKV("device_id.hostname", h)
+		printKV("device_id.username", u)
+		printKV("local_url", serverURL)
+		printKV("logs", filepath.Join(a.RootDir(), "app.log"))
+
+		if mode == "cloud" {
+			webURL := strings.TrimSuffix(a.CloudBaseURL(), "/cloud-api") + "/cloud"
+			fmt.Println()
+			fmt.Println(headingStyle.Render("→ Cloud dashboard"))
+			fmt.Printf("  %s\n", valueStyle.Render(webURL))
+		}
 	} else {
 		printInfo("Stopped")
-		fmt.Print(renderKV([][2]string{
-			{"root", a.RootDir()},
-			{"cloud_url", a.CloudBaseURL()},
-			{"auth", fmt.Sprintf("%t", cred != nil)},
-			{"device", fmt.Sprintf("%t", dev != nil)},
-			{"device_id", deviceIDVal},
-		}))
+		printSection("Developer info")
+		printKV("root", a.RootDir())
+		printKV("cloud_url", a.CloudBaseURL())
+		printKV("auth", fmt.Sprintf("%t", cred != nil))
+		printKV("device", fmt.Sprintf("%t", dev != nil))
+		printKV("device_id", deviceIDVal)
 	}
 	return nil
 }

@@ -9,14 +9,19 @@ import (
 	"strings"
 )
 
-func GenerateMachineID() string {
-	hostname, _ := os.Hostname()
-	username := "unknown"
+func MachineIDParts() (platform, hostname, username string) {
+	hostname, _ = os.Hostname()
+	username = "unknown"
 	if u, err := user.Current(); err == nil && u.Username != "" {
 		username = stripDomain(u.Username)
 	}
-	p := jsPlatform()
-	raw := fmt.Sprintf("%s-%s-%s", p, hostname, username)
+	platform = jsPlatform()
+	return
+}
+
+func GenerateMachineID() string {
+	platform, hostname, username := MachineIDParts()
+	raw := fmt.Sprintf("%s-%s-%s", platform, hostname, username)
 	h := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", h)
 }
