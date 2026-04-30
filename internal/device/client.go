@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"cs-cloud/internal/config"
@@ -159,7 +160,7 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 	reqBody := registerRequest{
 		DeviceID:    deviceID,
 		DisplayName: hostname(),
-		Platform:    provider.JSPlatform(),
+		Platform:    runtime.GOOS + "-" + runtime.GOARCH,
 		Version:     version.Get(),
 	}
 	body, err := json.Marshal(reqBody)
