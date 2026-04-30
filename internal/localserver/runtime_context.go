@@ -78,7 +78,7 @@ func (s *Server) handleVcs(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  envelope{data=map[string]bool}
 // @Router       /runtime/dispose [post]
 func (s *Server) handleInstanceDispose(w http.ResponseWriter, r *http.Request) {
-	workspace := r.Header.Get(workspaceDirHeader)
+	workspace := getWorkspaceDir(r)
 	if workspace != "" {
 		if abs, err := filepath.Abs(filepath.Clean(workspace)); err == nil {
 			s.invalidateFindFilesCache(abs)
