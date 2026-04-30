@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -204,6 +205,40 @@ func isAuthError(err error) bool {
 		strings.Contains(msg, "token expired")
 }
 
+func (s *Server) fetchLocalFavorites(r *http.Request) ([]favoriteItem, error) {
+	recorder := httptest.NewRecorder()
+	s.handleProxy(recorder, r)
+
+	if recorder.Code != http.StatusOK {
+		return nil, fmt.Errorf("proxy returned %d", recorder.Code)
+	}
+
+	var items []favoriteItem
+	if err := json.NewDecoder(recorder.Body).Decode(&items); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func mergeFavorites(cloud, local []favoriteItem) []favoriteItem {
+	localMap := make(map[string]favoriteItem, len(local))
+	for _, item := range local {
+		localMap[item.Slug] = item
+	}
+
+	merged := make([]favoriteItem, len(cloud))
+	for i, item := range cloud {
+		if localItem, ok := localMap[item.Slug]; ok {
+			item.Status = localItem.Status
+			item.LocalPath = localItem.LocalPath
+		}
+		merged[i] = item
+	}
+
+	return merged
+}
+
 // @Summary      List favorite items
 // @Description  List all cloud favorite items with their current status. Supports filtering by type via query parameter.
 // @Tags         Agent
@@ -215,7 +250,8 @@ func isAuthError(err error) bool {
 // @Router       /agents/favorites [get]
 func (s *Server) handleFavoriteList(w http.ResponseWriter, r *http.Request) {
 	itemType := r.URL.Query().Get("type")
-	items, err := fetchCloudFavorites(r.Context(), itemType)
+
+	cloudItems, err := fetchCloudFavorites(r.Context(), itemType)
 	if err != nil {
 		logger.Error("fetch cloud favorites failed: %v", err)
 		if isAuthError(err) {
@@ -225,7 +261,14 @@ func (s *Server) handleFavoriteList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+
+	localItems, localErr := s.fetchLocalFavorites(r)
+	if localErr != nil {
+		logger.Warn("fetch local favorites failed: %v", localErr)
+	}
+
+	merged := mergeFavorites(cloudItems, localItems)
+	writeJSON(w, http.StatusOK, merged)
 }
 
 // @Summary      Load a favorite item
