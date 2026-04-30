@@ -155,7 +155,7 @@ waitDone:
 	printKV("logs", filepath.Join(a.RootDir(), "app.log"))
 
 	if mode == "cloud" {
-		webURL := strings.TrimSuffix(a.CloudBaseURL(), "/cloud-api")
+		webURL := strings.TrimSuffix(a.CloudBaseURL(), "/cloud-api") + "/cloud"
 		fmt.Println()
 		fmt.Println(headingStyle.Render("→ Cloud dashboard"))
 		fmt.Printf("  %s\n", valueStyle.Render(webURL))
