@@ -28,6 +28,7 @@ type Manager struct {
 	replacer     *Replacer
 	policy       Policy
 	interval     time.Duration
+	autoCheck    bool
 	upgradesDir  string
 	mu           sync.Mutex
 	running      bool
@@ -44,6 +45,10 @@ func WithPolicy(p Policy) Option {
 
 func WithInterval(d time.Duration) Option {
 	return func(m *Manager) { m.interval = d }
+}
+
+func WithAutoCheck(v bool) Option {
+	return func(m *Manager) { m.autoCheck = v }
 }
 
 func NewManager(cloudBaseURL, rootDir string, opts ...Option) *Manager {
@@ -72,18 +77,8 @@ func NewManager(cloudBaseURL, rootDir string, opts ...Option) *Manager {
 func (m *Manager) Run(ctx context.Context) {
 	m.verifyOnStartup()
 
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
-
-	m.doCheck(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			m.doCheck(ctx)
-		}
+	if m.autoCheck {
+		m.doCheck(ctx)
 	}
 }
 
@@ -197,7 +192,7 @@ func (m *Manager) doCheck(ctx context.Context) {
 }
 
 func (m *Manager) executeUpgrade(ctx context.Context, result *CheckResult) error {
-	logger.Info("starting upgrade to %s", result.Version)
+	logger.Info("starting upgrade to %s (force=%v)", result.Version, result.Force)
 
 	newBinary, err := m.downloadAndVerify(ctx, result)
 	if err != nil {
@@ -215,6 +210,7 @@ func (m *Manager) executeUpgrade(ctx context.Context, result *CheckResult) error
 		return fmt.Errorf("resolve exe symlink: %w", err)
 	}
 
+	logger.Info("replacing binary: %s -> %s", version.Get(), result.Version)
 	if err := m.replacer.Replace(exe, newBinary, version.Get(), result.Version); err != nil {
 		cleanupFile(newBinary)
 		return fmt.Errorf("replace: %w", err)
@@ -233,13 +229,18 @@ func (m *Manager) downloadAndVerify(ctx context.Context, result *CheckResult) (s
 		return "", fmt.Errorf("no download url in check result")
 	}
 
-	logger.Info("downloading %s ...", result.Version)
+	start := time.Now()
+	logger.Info("downloading %s from %s", result.Version, result.DownloadURL)
 	path, err := m.downloader.Download(ctx, result.DownloadURL, result.SHA256)
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
 	}
 
-	logger.Info("download verified (sha256 ok)")
+	if fi, fiErr := os.Stat(path); fiErr == nil {
+		logger.Info("download complete: %d bytes in %s (sha256 ok)", fi.Size(), time.Since(start).Round(time.Millisecond))
+	} else {
+		logger.Info("download verified (sha256 ok) in %s", time.Since(start).Round(time.Millisecond))
+	}
 	return path, nil
 }
 

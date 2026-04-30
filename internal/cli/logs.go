@@ -11,7 +11,7 @@ import (
 
 func logs(a *app.App) error {
 	path := a.LogFilePath()
-	f, err := os.Open(path)
+	f, err := openFileShared(path)
 	if err != nil {
 		printWarn("No log file found")
 		printInfo("Path: %s", path)
@@ -47,7 +47,7 @@ func tailLogs(a *app.App, follow bool) {
 		return
 	}
 
-	f, err := os.Open(path)
+	f, err := openFileShared(path)
 	if err != nil {
 		return
 	}
@@ -83,7 +83,7 @@ func tailLogs(a *app.App, follow bool) {
 		if err != nil || info.Size() <= size {
 			continue
 		}
-		f, err := os.Open(path)
+		f, err := openFileShared(path)
 		if err != nil {
 			continue
 		}

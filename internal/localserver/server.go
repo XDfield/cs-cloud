@@ -31,6 +31,8 @@ type Server struct {
 	findFilesMu     sync.Mutex
 	findFilesCache  map[string]*fileSearchIndex
 	findFilesBuilds map[string]*fileSearchBuild
+
+	dispatcher *CommandDispatcher
 }
 
 func New(opts ...Option) *Server {
@@ -84,7 +86,7 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /agents/health", s.handleAgentHealth)
 	api.HandleFunc("GET /agents/models", s.handleProxy)
 	api.HandleFunc("GET /agents/session-modes", s.handleProxy)
-	api.HandleFunc("GET /agents/commands", s.handleProxy)
+	api.HandleFunc("GET /agents/commands", s.handleCommands)
 	api.HandleFunc("GET /agents/mcp", s.handleProxy)
 	api.HandleFunc("GET /agents/lsp", s.handleProxy)
 
@@ -145,6 +147,10 @@ func New(opts ...Option) *Server {
 
 	api.HandleFunc("GET /events", s.handleProxy)
 
+	api.HandleFunc("GET /agents/favorites", s.handleFavoriteList)
+	api.HandleFunc("POST /agents/favorites/{id}/load", s.handleFavoriteLoad)
+	api.HandleFunc("POST /agents/favorites/{id}/unload", s.handleFavoriteUnload)
+
 	api.HandleFunc("GET /permissions", s.handleProxy)
 	api.HandleFunc("POST /permissions/{id}/reply", s.handleProxy)
 
@@ -159,6 +165,9 @@ func New(opts ...Option) *Server {
 	api.HandleFunc("GET /terminal/{id}/stream", s.termH.HandleStream)
 	api.HandleFunc("POST /terminal/{id}/input", s.termH.HandleInput)
 	api.HandleFunc("GET /terminal/input-ws", s.inputWsH.ServeHTTP)
+
+	api.HandleFunc("POST /commands", s.handleCommandDispatch)
+	api.HandleFunc("GET /commands/status", s.handleCommandStatus)
 
 	s.http = &http.Server{
 		Handler:           mux,
@@ -225,4 +234,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) TerminalManager() *terminal.TerminalManager {
 	return s.termMgr
+}
+
+func (s *Server) SetDispatcher(d *CommandDispatcher) {
+	s.dispatcher = d
+}
+
+func (s *Server) Dispatcher() *CommandDispatcher {
+	return s.dispatcher
 }

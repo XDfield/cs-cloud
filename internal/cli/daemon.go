@@ -17,6 +17,7 @@ import (
 	"cs-cloud/internal/localserver"
 	"cs-cloud/internal/logger"
 	"cs-cloud/internal/tunnel"
+	"cs-cloud/internal/updater"
 	"cs-cloud/internal/version"
 )
 
@@ -173,7 +174,7 @@ func runDaemon(a *app.App) error {
 		return err
 	}
 
-	logger.Info("daemon started (version: %s, mode: %s, port: %d)", version.FullString(), mode, srv.Port())
+	logger.Info("daemon started (version: %s, mode: %s, port: %d, auto_upgrade: %v)", version.FullString(), mode, srv.Port(), a.Config().AutoUpgrade)
 	logger.Info("swagger docs: %s/api/v1/docs", srv.URL())
 	recent, err := a.LoadRecentWorkspaces()
 	if err != nil {
@@ -207,30 +208,78 @@ func runDaemon(a *app.App) error {
 			logger.Error("device not registered")
 			return nil
 		}
+		_ = info
 
-		ctx := context.Background()
-		go func() {
-			if err := tunnel.Connect(ctx, srv.Port()); err != nil {
-				logger.Error("tunnel error: %v", err)
-			}
-		}()
-	}
+		cloudCtx, cloudCancel := context.WithCancel(context.Background())
+		defer cloudCancel()
 
-	if runtime.GOOS == "windows" {
-		a.RemoveStopFile()
-		go func() {
-			for {
-				time.Sleep(500 * time.Millisecond)
-				if a.StopFileExists() {
-					shutdown <- syscall.SIGTERM
-					return
+		reporter := localserver.NewCommandReporter()
+		dispatcher := localserver.NewCommandDispatcher(a, reporter)
+		srv.SetDispatcher(dispatcher)
+
+		deviceClient := device.NewClient(a.Config())
+		dispatcher.BindDeviceClient(deviceClient)
+
+		updaterMgr := updater.NewManager(
+			a.CloudBaseURL(), a.RootDir(),
+			updater.WithPolicy(updater.PolicyAuto),
+			updater.WithAutoCheck(a.Config().AutoUpgrade),
+		)
+		dispatcher.BindUpdater(updaterMgr)
+		go updaterMgr.Run(cloudCtx)
+
+		tunnelMgr := tunnel.NewManager()
+		dispatcher.BindTunnel(tunnelMgr)
+
+		restarter := func() {
+			logger.Info("[daemon] self-restart triggered")
+			app.SelfRestart(a)
+		}
+		dispatcher.BindRestarter(restarter)
+
+		go device.HeartbeatLoop(cloudCtx, a.Config(), func(cmds []device.CloudCommand) {
+			dispatcher.HandleHeartbeatCommands(cmds)
+		})
+
+		go tunnel.RunManagedTunnel(cloudCtx, srv.Port(), tunnelMgr)
+
+		if runtime.GOOS == "windows" {
+			a.RemoveStopFile()
+			go func() {
+				for {
+					time.Sleep(500 * time.Millisecond)
+					if a.StopFileExists() {
+						shutdown <- syscall.SIGTERM
+						return
+					}
 				}
-			}
-		}()
-	}
+			}()
+		}
 
-	<-shutdown
-	logger.Info("daemon shutting down")
+		select {
+		case <-updaterMgr.RestartCh:
+			logger.Info("[daemon] upgrade completed, initiating self-restart")
+			restarter()
+		case <-shutdown:
+			logger.Info("daemon shutting down")
+		}
+	} else {
+		if runtime.GOOS == "windows" {
+			a.RemoveStopFile()
+			go func() {
+				for {
+					time.Sleep(500 * time.Millisecond)
+					if a.StopFileExists() {
+						shutdown <- syscall.SIGTERM
+						return
+					}
+				}
+			}()
+		}
+
+		<-shutdown
+		logger.Info("daemon shutting down")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

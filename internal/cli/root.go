@@ -35,6 +35,8 @@ func parseGlobalFlags() {
 			i++
 		case len(args[i]) > 11 && args[i][:11] == "--data-dir=":
 			platform.SetDataDir(args[i][11:])
+		case args[i] == "--no-auto-upgrade":
+			platform.SetNoAutoUpgrade(true)
 		}
 	}
 }
@@ -58,6 +60,7 @@ func commandArgs() []string {
 			i++
 		case strings.HasPrefix(args[i], "--port="):
 		case strings.HasPrefix(args[i], "-p="):
+		case args[i] == "--no-auto-upgrade":
 		default:
 			rest = append(rest, args[i])
 		}
@@ -161,6 +164,7 @@ func printUsage() {
 		{"--data-dir", "Base data directory (default: ~/.costrict)"},
 		{"--mode, -m", "Daemon mode: cloud (default) or local"},
 		{"--port, -p", "Local server port (default: random available port)"},
+		{"--no-auto-upgrade", "Disable auto-upgrade on cloud command"},
 	}))
 
 	printSection("Commands")

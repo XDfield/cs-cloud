@@ -2,6 +2,7 @@ package localserver
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -268,6 +269,25 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	if info.IsDir() {
 		writeErr(w, http.StatusBadRequest, "BAD_REQUEST", fmt.Sprintf("not a file: %s", absPath))
 		return
+	}
+
+	if info.Size() > 0 {
+		f, err := os.Open(absPath)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+			return
+		}
+		probeSize := int64(512)
+		if info.Size() < probeSize {
+			probeSize = info.Size()
+		}
+		buf := make([]byte, probeSize)
+		n, _ := f.Read(buf)
+		f.Close()
+		if bytes.IndexByte(buf[:n], 0) >= 0 {
+			writeErr(w, http.StatusUnprocessableEntity, "BINARY_FILE", fmt.Sprintf("file is not a text file: %s", absPath))
+			return
+		}
 	}
 
 	f, err := os.Open(absPath)

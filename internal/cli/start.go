@@ -94,6 +94,8 @@ func start(a *app.App) error {
 	}
 	if port > 0 {
 		daemonArgs = append(daemonArgs, "--port", fmt.Sprintf("%d", port))
+	if platform.NoAutoUpgrade() {
+		daemonArgs = append(daemonArgs, "--no-auto-upgrade")
 	}
 
 	cmd := newDaemonCmd(exe, daemonArgs)

@@ -17,10 +17,11 @@ type diffFileEntry struct {
 }
 
 type diffData struct {
-	Directory     string          `json:"directory" example:"/home/user/project"`
-	Branch        string          `json:"branch" example:"main"`
-	StagedFiles   []diffFileEntry `json:"stagedFiles"`
-	UnstagedFiles []diffFileEntry `json:"unstagedFiles"`
+	Directory      string          `json:"directory" example:"/home/user/project"`
+	Branch         string          `json:"branch" example:"main"`
+	StagedFiles    []diffFileEntry `json:"stagedFiles"`
+	UnstagedFiles  []diffFileEntry `json:"unstagedFiles"`
+	UntrackedFiles []diffFileEntry `json:"untrackedFiles"`
 }
 
 type diffContentData struct {
@@ -53,15 +54,16 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	filterPath := r.URL.Query().Get("path")
 
 	var (
-		branch        string
-		stagedFiles   []diffFileEntry
-		unstagedFiles []diffFileEntry
-		mu            sync.Mutex
-		wg            sync.WaitGroup
-		notGit        bool
+		branch         string
+		stagedFiles    []diffFileEntry
+		unstagedFiles  []diffFileEntry
+		untrackedFiles []diffFileEntry
+		mu             sync.Mutex
+		wg             sync.WaitGroup
+		notGit         bool
 	)
 
-	wg.Add(3)
+	wg.Add(4)
 
 	go func() {
 		defer wg.Done()
@@ -99,6 +101,18 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		unstagedFiles = entries
 	}()
 
+	go func() {
+		defer wg.Done()
+		entries, err := parseUntrackedFiles(absDir, filterPath)
+		if err != nil {
+			mu.Lock()
+			notGit = true
+			mu.Unlock()
+			return
+		}
+		untrackedFiles = entries
+	}()
+
 	wg.Wait()
 
 	if notGit {
@@ -107,10 +121,11 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOK(w, diffData{
-		Directory:     absDir,
-		Branch:        branch,
-		StagedFiles:   stagedFiles,
-		UnstagedFiles: unstagedFiles,
+		Directory:      absDir,
+		Branch:         branch,
+		StagedFiles:    stagedFiles,
+		UnstagedFiles:  unstagedFiles,
+		UntrackedFiles: untrackedFiles,
 	})
 }
 
@@ -152,6 +167,34 @@ func parseDiffStatErr(dir string, staged bool, filterPath string) ([]diffFileEnt
 			Status:    status,
 			Additions: additions,
 			Deletions: deletions,
+		})
+	}
+
+	if len(entries) == 0 && filterPath == "" {
+		entries = []diffFileEntry{}
+	}
+	return entries, nil
+}
+
+func parseUntrackedFiles(dir string, filterPath string) ([]diffFileEntry, error) {
+	args := []string{"-C", dir, "ls-files", "--others", "--exclude-standard"}
+	if filterPath != "" {
+		args = append(args, "--", filterPath)
+	}
+
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []diffFileEntry
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		entries = append(entries, diffFileEntry{
+			Path:   line,
+			Status: "untracked",
 		})
 	}
 
