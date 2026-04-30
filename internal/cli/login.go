@@ -32,6 +32,10 @@ func login(a *app.App) error {
 			return err
 		}
 		printWarn("Device registration failed: %v", err)
+		if u := device.GetRegistrationURL(err); u != "" {
+			printKV("register_url", u)
+		}
+		printKV("device_id", cred.MachineID)
 		return nil
 	}
 	printSuccess("Device registered")

@@ -26,6 +26,11 @@ func status(a *app.App) error {
 
 	printTitle("cs-cloud status")
 
+	deviceIDVal := ""
+	if dev != nil {
+		deviceIDVal = dev.DeviceID
+	}
+
 	if running {
 		printSuccess("Running")
 		fmt.Print(renderKV([][2]string{
@@ -35,6 +40,7 @@ func status(a *app.App) error {
 			{"cloud_url", a.CloudBaseURL()},
 			{"auth", fmt.Sprintf("%t", cred != nil)},
 			{"device", fmt.Sprintf("%t", dev != nil)},
+			{"device_id", deviceIDVal},
 			{"local_url", serverURL},
 			{"logs", filepath.Join(a.RootDir(), "app.log")},
 		}))
@@ -45,6 +51,7 @@ func status(a *app.App) error {
 			{"cloud_url", a.CloudBaseURL()},
 			{"auth", fmt.Sprintf("%t", cred != nil)},
 			{"device", fmt.Sprintf("%t", dev != nil)},
+			{"device_id", deviceIDVal},
 		}))
 	}
 	return nil

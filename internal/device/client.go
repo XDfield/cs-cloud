@@ -177,12 +177,12 @@ func enroll(ctx context.Context, creds *provider.Credentials, base, deviceID str
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("device registration failed: %d %s", resp.StatusCode, string(respBody))
+		return nil, &RegistrationError{StatusCode: resp.StatusCode, Message: string(respBody), URL: url}
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("device registration failed: %d %s", resp.StatusCode, string(respBody))
+		return nil, &RegistrationError{StatusCode: resp.StatusCode, Message: string(respBody), URL: url}
 	}
 
 	var out registerResponse
@@ -335,10 +335,18 @@ var _ error = (*RegistrationError)(nil)
 type RegistrationError struct {
 	StatusCode int
 	Message    string
+	URL        string
 }
 
 func (e *RegistrationError) Error() string {
 	return fmt.Sprintf("device registration failed: %d %s", e.StatusCode, e.Message)
+}
+
+func GetRegistrationURL(err error) string {
+	if e, ok := err.(*RegistrationError); ok {
+		return e.URL
+	}
+	return ""
 }
 
 // ClearDevice removes the local device.json file
