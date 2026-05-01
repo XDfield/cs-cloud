@@ -27,7 +27,7 @@ func (c *Client) RotateToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+dev.DeviceToken)
+	setDeviceAuthHeaders(req, dev)
 
 	resp, err := platform.HTTPClient().Do(req)
 	if err != nil {
@@ -77,8 +77,7 @@ func (c *Client) Heartbeat() error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+dev.DeviceToken)
+	setDeviceAuthHeaders(req, dev)
 
 	resp, err := platform.HTTPClient().Do(req)
 	if err != nil {

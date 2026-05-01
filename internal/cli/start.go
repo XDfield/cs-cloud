@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,6 +40,7 @@ func start(a *app.App) error {
 	if mode == "cloud" {
 		info, err := registerWithLogin(ctx, a)
 		if err != nil {
+			printRegDebugInfo(a)
 			return err
 		}
 		printSuccess("Device registered")
@@ -46,18 +48,21 @@ func start(a *app.App) error {
 
 		if err := device.ValidateDeviceToken(ctx, info); err != nil {
 			if device.IsInvalidDeviceTokenError(err) {
-				fmt.Println("device token is invalid, regenerating...")
-				_ = device.ClearDevice()
-				info, err = registerWithLogin(ctx, a)
-				if err != nil {
-					return err
-				}
-				printWarn("Device re-registered")
-				printKV("device_id", info.DeviceID)
+		fmt.Println("device token is invalid, regenerating...")
+			_ = device.ClearDevice()
+			info, err = registerWithLogin(ctx, a)
+			if err != nil {
+				printRegDebugInfo(a)
+				return err
+			}
+			printWarn("Device re-registered")
+			printKV("device_id", info.DeviceID)
 				if err := device.ValidateDeviceToken(ctx, info); err != nil {
+					printRegDebugInfo(a)
 					return err
 				}
 			} else {
+				printRegDebugInfo(a)
 				return err
 			}
 		}
@@ -141,18 +146,42 @@ waitDone:
 	}
 
 	if !ready {
-		printError("Daemon failed to start")
-		printInfo("Check logs: %s", filepath.Join(a.RootDir(), "app.log"))
+		printError("cs-cloud failed to start")
+		fmt.Println()
+		fmt.Println(headingStyle.Render("Need help?"))
+		fmt.Println("  • Check the error message above")
+		fmt.Printf("  • Share the logs with the developers: %s\n", valueStyle.Render(filepath.Join(a.RootDir(), "app.log")))
 		os.Exit(1)
 	}
 
 	url, _ := a.ServerURL()
 	printSuccess("cs-cloud started")
+
+	printSection("Developer info")
 	printKV("pid", fmt.Sprintf("%d", cmd.Process.Pid))
 	printKV("mode", mode)
-	printKV("url", url)
+	if cred, _ := a.Credentials(); cred != nil {
+		if claims, err := provider.ParseJWT(cred.AccessToken); err == nil {
+			user := claims.ResolveDisplayName()
+			p := claims.ResolveProvider()
+			if p != "" || user != "" {
+				printKV("user", p+"/"+user)
+			}
+		}
+	}
+	// printKV("url", url)
 	printKV("docs", url+"/api/v1/docs")
+	printKV("swagger docs", url+"/api/v1/docs")
 	printKV("logs", filepath.Join(a.RootDir(), "app.log"))
+
+	if mode == "cloud" {
+		webURL := strings.TrimSuffix(a.CloudBaseURL(), "/cloud-api") + "/cloud"
+		fmt.Println()
+		fmt.Println(headingStyle.Render("→ Cloud dashboard"))
+		fmt.Printf("  %s\n", valueStyle.Render(webURL))
+		fmt.Println()
+		fmt.Println("Login successful. Visit " + webURL + " to use cloud services.")
+	}
 	return nil
 }
 
@@ -179,4 +208,14 @@ func registerWithLogin(ctx context.Context, a *app.App) (*device.DeviceInfo, err
 		}
 	}
 	return info, nil
+}
+
+func printRegDebugInfo(a *app.App) {
+	printSection("Debug info")
+	printKV("cloud_url", a.CloudBaseURL())
+	if devInfo, _ := a.Device(); devInfo != nil {
+		printKV("device_id", devInfo.DeviceID)
+	} else {
+		printKV("device_id", provider.GenerateMachineID())
+	}
 }

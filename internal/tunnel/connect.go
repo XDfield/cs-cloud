@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"cs-cloud/internal/config"
 	"cs-cloud/internal/device"
 	"cs-cloud/internal/logger"
 	"cs-cloud/internal/version"
@@ -25,7 +26,7 @@ const (
 	wsConnectTimeout = 15 * time.Second
 )
 
-func Connect(ctx context.Context, localPort int) error {
+func Connect(ctx context.Context, localPort int, cfg *config.Config) error {
 	attempt := 0
 	for {
 		select {
@@ -37,6 +38,15 @@ func Connect(ctx context.Context, localPort int) error {
 		dev, err := device.LoadDevice()
 		if err != nil || dev == nil {
 			return fmt.Errorf("device not registered, cannot connect tunnel")
+		}
+
+		if ownerErr := device.ValidateDeviceOwner(dev); ownerErr != nil {
+			logger.Warn("[tunnel] %v, attempting re-registration...", ownerErr)
+			dev, err = device.ReRegister(ctx, cfg)
+			if err != nil {
+				return fmt.Errorf("re-register failed: %w", err)
+			}
+			logger.Info("[tunnel] device re-registered successfully (device_id=%s)", dev.DeviceID)
 		}
 
 		gatewayURL, err := device.AssignGateway(ctx, dev)

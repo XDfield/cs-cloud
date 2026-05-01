@@ -133,9 +133,17 @@ func LoginCoStrict(ctx context.Context) (*Credentials, error) {
 	expiry := ExtractExpiryFromJWT(tokens.AccessToken)
 	now := time.Now()
 
+	var userID string
+	if claims, err := ParseJWT(tokens.AccessToken); err == nil {
+		userID = claims.UserID()
+	}
+	if userID == "" {
+		userID = machineID
+	}
+
 	cred := &Credentials{
-		ID:           "cs-cloud",
-		Name:         "CS-Cloud Auth",
+		ID:           userID,
+		Name:         "cs-cloud",
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		State:        state,

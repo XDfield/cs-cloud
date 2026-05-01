@@ -38,6 +38,8 @@ func doctor(a *app.App) error {
 	if dev != nil {
 		deviceID = dev.DeviceID
 		deviceBaseURL = dev.BaseURL
+	} else {
+		deviceID = provider.GenerateMachineID()
 	}
 
 	mgr := updater.NewManager(a.CloudBaseURL(), a.RootDir())

@@ -208,7 +208,16 @@ func runDaemon(a *app.App) error {
 			logger.Error("device not registered")
 			return nil
 		}
-		_ = info
+
+		if ownerErr := device.ValidateDeviceOwner(info); ownerErr != nil {
+			logger.Warn("[daemon] %v, attempting re-registration...", ownerErr)
+			info, err = device.ReRegister(context.Background(), a.Config())
+			if err != nil {
+				logger.Error("[daemon] re-register failed: %v", err)
+				return nil
+			}
+			logger.Info("[daemon] device re-registered successfully (device_id=%s)", info.DeviceID)
+		}
 
 		cloudCtx, cloudCancel := context.WithCancel(context.Background())
 		defer cloudCancel()
@@ -241,7 +250,7 @@ func runDaemon(a *app.App) error {
 			dispatcher.HandleHeartbeatCommands(cmds)
 		})
 
-		go tunnel.RunManagedTunnel(cloudCtx, srv.Port(), tunnelMgr)
+		go tunnel.RunManagedTunnel(cloudCtx, srv.Port(), tunnelMgr, a.Config())
 
 		if runtime.GOOS == "windows" {
 			a.RemoveStopFile()

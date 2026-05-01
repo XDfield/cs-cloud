@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"cs-cloud/internal/config"
 	"cs-cloud/internal/logger"
 )
 
@@ -48,7 +49,7 @@ func (m *Manager) Reconnect() {
 	}
 }
 
-func RunManagedTunnel(ctx context.Context, localPort int, mgr *Manager) {
+func RunManagedTunnel(ctx context.Context, localPort int, mgr *Manager, cfg *config.Config) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,7 +63,7 @@ func RunManagedTunnel(ctx context.Context, localPort int, mgr *Manager) {
 		mgr.SetConnected(false)
 
 		logger.Info("[tunnel-manager] starting tunnel connection (port=%d)", localPort)
-		err := Connect(tunnelCtx, localPort)
+		err := Connect(tunnelCtx, localPort, cfg)
 		if err != nil {
 			logger.Warn("[tunnel-manager] tunnel error: %v", err)
 		}

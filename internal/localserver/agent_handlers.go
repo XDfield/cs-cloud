@@ -54,7 +54,7 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 // @Failure      503  {object}  envelope
 // @Router       /agents/health [get]
 func (s *Server) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
-	if dir := r.Header.Get(workspaceDirHeader); dir != "" {
+	if dir := getWorkspaceDir(r); dir != "" {
 		if abs, err := filepath.Abs(filepath.Clean(dir)); err == nil {
 			s.rememberWorkspace(abs)
 		}

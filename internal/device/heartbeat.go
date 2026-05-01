@@ -32,6 +32,15 @@ func (c *Client) HeartbeatWithResponse(ctx context.Context) (*HeartbeatResponse,
 		return nil, err
 	}
 
+	if ownerErr := ValidateDeviceOwner(dev); ownerErr != nil {
+		logger.Warn("[heartbeat] %v, attempting re-registration...", ownerErr)
+		dev, err = ReRegister(ctx, c.cfg)
+		if err != nil {
+			return nil, fmt.Errorf("re-register failed: %w", err)
+		}
+		logger.Info("[heartbeat] device re-registered successfully (device_id=%s)", dev.DeviceID)
+	}
+
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -45,8 +54,7 @@ func (c *Client) HeartbeatWithResponse(ctx context.Context) (*HeartbeatResponse,
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+dev.DeviceToken)
+	setDeviceAuthHeaders(req, dev)
 
 	resp, err := platform.HTTPClient().Do(req)
 	if err != nil {

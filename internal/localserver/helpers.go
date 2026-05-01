@@ -39,8 +39,16 @@ func generateID() string {
 
 const workspaceDirHeader = "X-Workspace-Directory"
 
+func getWorkspaceDir(r *http.Request) string {
+	v := r.Header.Get(workspaceDirHeader)
+	if decoded, err := url.PathUnescape(v); err == nil {
+		return decoded
+	}
+	return v
+}
+
 func (s *Server) resolvePath(r *http.Request, relPath string) (absPath string, workspace string, err error) {
-	workspace = r.Header.Get(workspaceDirHeader)
+	workspace = getWorkspaceDir(r)
 	if workspace == "" {
 		workspace, _ = os.Getwd()
 	}
@@ -65,7 +73,7 @@ func (s *Server) resolvePath(r *http.Request, relPath string) (absPath string, w
 }
 
 func resolvePath(r *http.Request, relPath string) (absPath string, workspace string, err error) {
-	workspace = r.Header.Get(workspaceDirHeader)
+	workspace = getWorkspaceDir(r)
 	if workspace == "" {
 		workspace, _ = os.Getwd()
 	}
